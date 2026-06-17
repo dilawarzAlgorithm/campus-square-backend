@@ -1,7 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+from app.api import auth
+
+app = FastAPI(
+    title="Campus Square - Auth Engine",
+    description="Multi-tenant verification & identity routing for colleges & institutes.",
+    version="1.0.0"
+)
 
 origins = ["*"]
 
@@ -12,6 +18,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+app.include_router(auth.router)
 
 @app.get("/")
 def root():
