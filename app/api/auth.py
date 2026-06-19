@@ -1,14 +1,15 @@
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.core.database.database import get_db
 from app.models import models
 from app.schemas import schemas
-from app.core.utils import hash, verify, extract_domain
+from app.core.features.utils import hash, verify, extract_domain, generate_otp
 from app.core.auth.oauth2 import create_access_token, REFRESH_TOKEN_EXPIRE_DAYS
+from app.core.features.mail import send_otp_email
 
 router = APIRouter(
     prefix="/api/auth",
@@ -16,7 +17,7 @@ router = APIRouter(
 )
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
+def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks , db: Session = Depends(get_db)):
     try:
         domain = extract_domain(payload.email)
     except ValueError:
@@ -40,8 +41,7 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
                 "requires_onboarding": True,
                 "message": (
                     f"It looks like you are the first user registering from @{domain}! "
-                    "To set up Campus Square for your campus, please provide the 'institution_name' "
-                    "and 'institution_short_name'."
+                    "To set up Campus Square for your campus, please provide the 'institution_name' and 'institution_short_name'."
                 )
             }
         
@@ -54,6 +54,8 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
         db.add(institution)
         db.flush()
 
+    otp = generate_otp()
+
     user_id = str(uuid.uuid4())
     new_user = models.User(
         id=user_id,
@@ -64,7 +66,7 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
         role=payload.requested_role,
         institution_id=institution.id,
         is_verified=False,
-        verification_otp="123456",  # Mocked OTP
+        verification_otp=otp,
         otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
     )
     db.add(new_user)
@@ -76,6 +78,8 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     )
     db.add(new_profile)
     db.commit()
+
+    background_task.add_task(send_otp_email, payload.email, otp, payload.first_name)
 
     return {
         "success": True,

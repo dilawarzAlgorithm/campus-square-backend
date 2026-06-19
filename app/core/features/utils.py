@@ -1,5 +1,6 @@
 from passlib.context import CryptContext
 import re
+import secrets
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -14,3 +15,6 @@ def extract_domain(email: str) -> str:
     if not match:
         raise ValueError("Invalid email format")
     return match.group(1).lower()
+
+def generate_otp():
+    return "".join(secrets.choice("0123456789") for _ in range(6))
