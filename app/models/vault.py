@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum as SQLEnum, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 
 from app.core.database.database import Base
@@ -31,8 +31,8 @@ class AcademicResource(Base):
     upvote_count = Column(Integer, default=0, nullable=False)
     downvote_count = Column(Integer, default=0, nullable=False)
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     department_id = Column(String, ForeignKey("departments.id", ondelete="CASCADE"), nullable=False)
     department = relationship("Department", back_populates="resources")

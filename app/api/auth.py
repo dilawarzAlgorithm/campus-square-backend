@@ -67,7 +67,7 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         institution_id=institution.id,
         is_verified=False,
         verification_otp=otp,
-        otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
+        otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)
     )
     db.add(new_user)
     db.flush()
@@ -100,8 +100,7 @@ def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(ge
     if user.verification_otp != payload.otp:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP code.")
 
-    expires_at = user.otp_expires_at.replace(tzinfo=timezone.utc) if user.otp_expires_at.tzinfo is None else user.otp_expires_at
-    if datetime.now(timezone.utc) > expires_at:
+    if datetime.now(timezone.utc) > user.otp_expires_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired.")
 
     user.is_verified = True
@@ -126,7 +125,7 @@ def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db:
         )
     otp = generate_otp()
     user.verification_otp = otp
-    user.otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
+    user.otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)
     db.commit()
     db.refresh(user)
     background_task.add_task(send_otp_email, user.email, otp, user.first_name)
@@ -183,8 +182,7 @@ def refresh(payload: schemas.TokenRefreshRequest, db: Session = Depends(get_db))
             detail="Invalid or revoked refresh token."
         )
 
-    expires_at = db_token.expires_at.replace(tzinfo=timezone.utc) if db_token.expires_at.tzinfo is None else db_token.expires_at
-    if datetime.now(timezone.utc) > expires_at:
+    if datetime.now(timezone.utc) > db_token.expires_at:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token has expired. Please log in again."
