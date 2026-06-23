@@ -67,7 +67,7 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         institution_id=institution.id,
         is_verified=False,
         verification_otp=otp,
-        otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)
+        otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
     )
     db.add(new_user)
     db.flush()
@@ -125,7 +125,7 @@ def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db:
         )
     otp = generate_otp()
     user.verification_otp = otp
-    user.otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=1)
+    user.otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
     db.commit()
     db.refresh(user)
     background_task.add_task(send_otp_email, user.email, otp, user.first_name)
