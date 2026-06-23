@@ -7,7 +7,8 @@ from app.schemas.auth import (
     TokenRefreshResponse,
     RegisterRequest,
     LoginRequest,
-    OTPVerificationRequest
+    OTPVerificationRequest,
+    ResendOtp
 )
 
 from app.schemas.vault import (

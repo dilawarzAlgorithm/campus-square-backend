@@ -111,6 +111,27 @@ def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(ge
 
     return {"success": True, "message": "Your account has been successfully verified! You can now log in."}
 
+@router.post("/resend-otp")
+def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    if not user or not verify(payload.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password."
+    )
+    if user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account is already verified. You can log in directly."
+        )
+    otp = generate_otp()
+    user.verification_otp = otp
+    user.otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
+    db.commit()
+    db.refresh(user)
+    background_task.add_task(send_otp_email, user.email, otp, user.first_name)
+
+    return {"success": True, "message": "A new verification code has been sent."}
 
 @router.post("/login", response_model=schemas.Token)
 def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):

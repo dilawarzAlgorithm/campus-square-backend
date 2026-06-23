@@ -62,6 +62,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ResendOtp(BaseModel):
+    email: EmailStr
+    password: str
+
 class OTPVerificationRequest(BaseModel):
     email: EmailStr
     otp: str
