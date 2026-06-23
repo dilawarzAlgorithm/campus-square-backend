@@ -96,7 +96,7 @@ def get_resources(
     department_id: Optional[str] = None,
     semester: Optional[int] = Query(None, ge=1, le=8),
     resource_type: Optional[ResourceType] = None,
-    sort_by: str = Query("upvotes", regex="^(upvotes|newest)$"),
+    sort_by: str = Query("upvotes", pattern="^(upvotes|newest)$"),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
