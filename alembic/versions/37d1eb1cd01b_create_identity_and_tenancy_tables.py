@@ -26,8 +26,8 @@ def upgrade() -> None:
     sa.Column('name', sa.String(), nullable=False),
     sa.Column('short_name', sa.String(), nullable=False),
     sa.Column('domain', sa.String(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
-    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_institutions_domain'), 'institutions', ['domain'], unique=True)
@@ -41,10 +41,10 @@ def upgrade() -> None:
     sa.Column('role', sa.Enum('STUDENT', 'EMPLOYEE', 'COMMUNITY_HEAD', 'ADMIN', name='userrole'), nullable=False),
     sa.Column('is_verified', sa.Boolean(), nullable=True),
     sa.Column('verification_otp', sa.String(), nullable=True),
-    sa.Column('otp_expires_at', sa.DateTime(), nullable=True),
+    sa.Column('otp_expires_at', sa.TIMESTAMP(timezone=True), nullable=True),
     sa.Column('karma', sa.Integer(), nullable=True),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
-    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('institution_id', sa.String(), nullable=False),
     sa.ForeignKeyConstraint(['institution_id'], ['institutions.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -66,9 +66,9 @@ def upgrade() -> None:
     sa.Column('id', sa.String(), nullable=False),
     sa.Column('token', sa.String(), nullable=False),
     sa.Column('user_id', sa.String(), nullable=False),
-    sa.Column('expires_at', sa.DateTime(), nullable=False),
+    sa.Column('expires_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('revoked', sa.Boolean(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
@@ -92,3 +92,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_institutions_domain'), table_name='institutions')
     op.drop_table('institutions')
     # ### end Alembic commands ###
+
+    op.execute("DROP TYPE IF EXISTS userrole CASCADE;")
+    op.execute("DROP TYPE IF EXISTS resourcetype CASCADE;")
+    op.execute("DROP TYPE IF EXISTS votetype CASCADE;")
