@@ -7,7 +7,7 @@ from app.core.database.database import get_db
 from app.models import models
 from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
-from app.enum.enum import ResourceType, VoteType
+from app.enum.enum import ResourceType, VoteType, UserRole
 
 router = APIRouter(
     prefix="/api/vault",
@@ -118,6 +118,33 @@ def get_resources(
 
     return query.all()
 
+@router.delete("/resources/{resource_id}", status_code=status.HTTP_200_OK)
+def delete_resource(
+    resource_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    resource = db.query(models.AcademicResource).join(models.Department).filter(
+        models.AcademicResource.id == resource_id,
+        models.Department.institution_id == current_user.institution_id
+    ).first()
+
+    if not resource:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The requested academic resource does not exist or belongs to another institution."
+        )
+
+    if resource.uploader_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to delete this resource."
+        )
+
+    db.delete(resource)
+    db.commit()
+
+    return {"success": True, "message": "Resource successfully deleted."}
 
 @router.post("/resources/{resource_id}/vote", response_model=schemas.ResourceResponse)
 def vote_resource(
@@ -146,14 +173,17 @@ def vote_resource(
 
     if existing_vote:
         if existing_vote.vote_type == payload.vote_type:
-            if payload.vote_type == VoteType.UPVOTE:
-                resource.upvote_count = max(0, resource.upvote_count - 1)
-                if uploader:
-                    uploader.karma = max(0, uploader.karma - 5)
-            else:
-                resource.downvote_count = max(0, resource.downvote_count - 1)
+            # Do nothing if again clicked on same vote type.
+            pass
+            # To toggle, un-comment this ->
+            # if payload.vote_type == VoteType.UPVOTE:
+            #     resource.upvote_count = max(0, resource.upvote_count - 1)
+            #     if uploader:
+            #         uploader.karma = max(0, uploader.karma - 5)
+            # else:
+            #     resource.downvote_count = max(0, resource.downvote_count - 1)
             
-            db.delete(existing_vote)
+            # db.delete(existing_vote)
 
         else:
             if payload.vote_type == VoteType.UPVOTE:
