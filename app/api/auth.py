@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 from app.core.database.database import get_db
 from app.models import models
 from app.schemas import schemas
+from app.enum.enum import UserRole
 from app.core.features.utils import hash, verify, extract_domain, generate_otp
 from app.core.auth.oauth2 import create_access_token, REFRESH_TOKEN_EXPIRE_DAYS
 from app.core.features.mail import send_otp_email
+from app.core.config.config import settings
 
 router = APIRouter(
     prefix="/api/auth",
@@ -54,7 +56,25 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         db.add(institution)
         db.flush()
 
-    otp = generate_otp()
+    admin_creds = settings.get_admin_credentials()
+    community_creds = settings.get_community_credentials()
+
+    assigned_role = payload.requested_role
+    is_verified = False
+    otp = None
+
+    if payload.email in admin_creds:
+        if payload.password != admin_creds[payload.email]:
+            raise HTTPException(status_code=401, detail="Invalid password.")
+        assigned_role = UserRole.ADMIN
+        is_verified = True
+    elif payload.email in community_creds:
+        if payload.password != community_creds[payload.email]:
+            raise HTTPException(status_code=401, detail="Invalid password.")
+        assigned_role = UserRole.COMMUNITY_HEAD
+        is_verified = True
+    else:
+        otp = generate_otp()
 
     user_id = str(uuid.uuid4())
     new_user = models.User(
@@ -63,9 +83,9 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         password_hash=hash(payload.password),
         first_name=payload.first_name,
         last_name=payload.last_name,
-        role=payload.requested_role,
+        role=assigned_role,
         institution_id=institution.id,
-        is_verified=False,
+        is_verified=is_verified,
         verification_otp=otp,
         otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
     )
@@ -79,13 +99,19 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
     db.add(new_profile)
     db.commit()
 
-    background_task.add_task(send_otp_email, payload.email, otp, payload.first_name)
-
-    return {
-        "success": True,
-        "message": f"Successfully registered! Please verify your email using the OTP sent to {payload.email}.",
-        "user_id": new_user.id
-    }
+    if not is_verified:
+        background_task.add_task(send_otp_email, payload.email, otp, payload.first_name)
+        return {
+            "success": True,
+            "message": f"Successfully registered! Please verify your email using the OTP sent to {payload.email}.",
+            "user_id": new_user.id
+        }
+    else:
+        return {
+            "success": True,
+            "message": "Elevated account successfully registered and auto-verified! You can log in directly.",
+            "user_id": new_user.id
+        }
 
 
 @router.post("/verify-otp")
