@@ -281,9 +281,6 @@ def change_password(payload: schemas.ChangePasswordRequest, current_user: models
         "user": current_user
     }
 
-@router.get("/all")
-def get_all(db: Session = Depends(get_db)):
-    return db.query(models.User).all()
 
 @router.post("/refresh", response_model=schemas.TokenRefreshResponse)
 def refresh(payload: schemas.TokenRefreshRequest, db: Session = Depends(get_db)):
