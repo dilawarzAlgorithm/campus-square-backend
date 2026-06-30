@@ -174,16 +174,16 @@ def vote_resource(
     if existing_vote:
         if existing_vote.vote_type == payload.vote_type:
             # Do nothing if again clicked on same vote type.
-            pass
+            # pass
             # To toggle, un-comment this ->
-            # if payload.vote_type == VoteType.UPVOTE:
-            #     resource.upvote_count = max(0, resource.upvote_count - 1)
-            #     if uploader:
-            #         uploader.karma = max(0, uploader.karma - 5)
-            # else:
-            #     resource.downvote_count = max(0, resource.downvote_count - 1)
+            if payload.vote_type == VoteType.UPVOTE:
+                resource.upvote_count = max(0, resource.upvote_count - 1)
+                if uploader:
+                    uploader.karma = max(0, uploader.karma - 5)
+            else:
+                resource.downvote_count = max(0, resource.downvote_count - 1)
             
-            # db.delete(existing_vote)
+            db.delete(existing_vote)
 
         else:
             if payload.vote_type == VoteType.UPVOTE:
