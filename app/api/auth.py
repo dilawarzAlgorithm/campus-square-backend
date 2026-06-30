@@ -3,7 +3,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import Union, Dict, Any
 
 from app.core.database.database import get_db
 from app.models import models
