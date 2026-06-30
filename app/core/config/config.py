@@ -15,13 +15,10 @@ class Settings(BaseSettings):
     smtp_username: str
     smtp_password: str
     smtp_from_email: str
+    admin_id: str
+    admin_password: str
 
-    admin_mail_id: str = ""
     community_mail_id: str = ""
-
-    def get_admin_credentials(self) -> dict:
-        if not self.admin_mail_id: return {}
-        return dict(item.split(":") for item in self.admin_mail_id.split(",") if ":" in item)
 
     def get_community_credentials(self) -> dict:
         if not self.community_mail_id: return {}

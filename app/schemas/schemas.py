@@ -8,6 +8,8 @@ from app.schemas.auth import (
     RegisterRequest,
     LoginRequest,
     OTPVerificationRequest,
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     ResendOtp
 )
 

@@ -3,13 +3,17 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
+from typing import Union, Dict, Any
 
 from app.core.database.database import get_db
 from app.models import models
 from app.schemas import schemas
+from app.enum.enum import UserRole
+from app.core.config.config import settings
 from app.core.features.utils import hash, verify, extract_domain, generate_otp
 from app.core.auth.oauth2 import create_access_token, REFRESH_TOKEN_EXPIRE_DAYS
 from app.core.features.mail import send_otp_email
+from app.core.auth.oauth2 import get_current_user
 
 router = APIRouter(
     prefix="/api/auth",
@@ -87,7 +91,6 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         "user_id": new_user.id
     }
 
-
 @router.post("/verify-otp")
 def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
@@ -140,6 +143,12 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password."
         )
+    
+    if user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff and administrators must log in through the Staff Portal."
+        )
 
     if not user.is_verified:
         raise HTTPException(
@@ -168,6 +177,112 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         "user": user
     }
 
+@router.post("/login-staff")
+def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    if user:
+        if not verify(payload.password, user.password_hash):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
+        
+        if user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied. Not a staff member.")
+
+    else:
+        role_to_assign = None
+        
+        if payload.email == settings.admin_id and payload.password == settings.admin_password:
+            role_to_assign = UserRole.ADMIN
+        else:
+            community_creds = settings.get_community_credentials()
+            if payload.email in community_creds and payload.password == community_creds[payload.email]:
+                role_to_assign = UserRole.COMMUNITY_HEAD
+                
+        if not role_to_assign:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
+            
+        try:
+            domain = extract_domain(payload.email)
+        except ValueError:
+            domain = "system.local" # fallback
+
+        institution = db.query(models.Institution).filter(models.Institution.domain == domain).first()
+        
+        if not institution:
+            if not payload.institution_name or not payload.institution_short_name:
+                return {
+                    "requires_onboarding": True,
+                    "message": (
+                        f"Welcome to the portal! As a {role_to_assign.value}, "
+                        "please provide your Institution Full Name and Short Name to initialize your campus environment."
+                    )
+                }
+            
+            institution = models.Institution(
+                id=str(uuid.uuid4()),
+                name=payload.institution_name,
+                short_name=payload.institution_short_name,
+                domain=domain
+            )
+            db.add(institution)
+            db.flush()
+            
+        user = models.User(
+            id=str(uuid.uuid4()),
+            email=payload.email,
+            password_hash=hash(payload.password),
+            first_name="System",
+            last_name="Staff",
+            role=role_to_assign,
+            institution_id=institution.id,
+            is_verified=True, 
+            requires_password_change=True
+        )
+        db.add(user)
+        
+        new_profile = models.Profile(id=str(uuid.uuid4()), user_id=user.id)
+        db.add(new_profile)
+        db.commit()
+        db.refresh(user)
+
+    access_token = create_access_token(data={"sub": user.email})
+    refresh_token_str = secrets.token_urlsafe(64)
+    refresh_expires = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
+    db_refresh_token = models.RefreshToken(
+        id=str(uuid.uuid4()),
+        token=refresh_token_str,
+        user_id=user.id,
+        expires_at=refresh_expires
+    )
+    db.add(db_refresh_token)
+    db.commit()
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token_str,
+        "token_type": "bearer",
+        "user": user
+    }
+
+@router.post("/change-password")
+def change_password(payload: schemas.ChangePasswordRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not verify(payload.old_password, current_user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect old password.")
+    
+    current_user.password_hash = hash(payload.new_password)
+    current_user.requires_password_change = False
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "success": True, 
+        "message": "Password updated successfully.",
+        "user": current_user
+    }
+
+@router.get("/all")
+def get_all(db: Session = Depends(get_db)):
+    return db.query(models.Institution).all()
 
 @router.post("/refresh", response_model=schemas.TokenRefreshResponse)
 def refresh(payload: schemas.TokenRefreshRequest, db: Session = Depends(get_db)):

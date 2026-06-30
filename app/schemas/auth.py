@@ -19,6 +19,7 @@ class UserResponse(BaseModel):
     last_name: str
     role: UserRole
     is_verified: bool
+    requires_password_change: bool = False
     karma: int
     institution_id: str
     profile: Optional[ProfileSchema] = None
@@ -60,6 +61,19 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    institution_name: Optional[str] = None
+    institution_short_name: Optional[str] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str = Field(..., min_length=8)
+
+
+class ChangePasswordResponse(BaseModel):
+    success: bool
+    message: str
+    user: UserResponse
 
 
 class ResendOtp(BaseModel):
