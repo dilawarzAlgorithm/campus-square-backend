@@ -256,11 +256,13 @@ def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     db.add(db_refresh_token)
     db.commit()
 
+    user_data = schemas.UserResponse.model_validate(user)
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_token_str,
         "token_type": "bearer",
-        "user": user
+        "user": user_data
     }
 
 @router.post("/change-password")
@@ -279,6 +281,9 @@ def change_password(payload: schemas.ChangePasswordRequest, current_user: models
         "user": current_user
     }
 
+@router.get("/all")
+def get_all(db: Session = Depends(get_db)):
+    return db.query(models.User).all()
 
 @router.post("/refresh", response_model=schemas.TokenRefreshResponse)
 def refresh(payload: schemas.TokenRefreshRequest, db: Session = Depends(get_db)):
