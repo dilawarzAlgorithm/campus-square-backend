@@ -90,6 +90,7 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         "user_id": new_user.id
     }
 
+
 @router.post("/verify-otp")
 def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
@@ -112,6 +113,7 @@ def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(ge
 
     return {"success": True, "message": "Your account has been successfully verified! You can now log in."}
 
+
 @router.post("/resend-otp")
 def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
@@ -133,6 +135,7 @@ def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db:
     background_task.add_task(send_otp_email, user.email, otp, user.first_name)
 
     return {"success": True, "message": "A new verification code has been sent."}
+
 
 @router.post("/login", response_model=schemas.Token)
 def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
@@ -175,6 +178,7 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user": user
     }
+
 
 @router.post("/login-staff")
 def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
@@ -264,6 +268,7 @@ def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user": user_data
     }
+
 
 @router.post("/change-password")
 def change_password(payload: schemas.ChangePasswordRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):

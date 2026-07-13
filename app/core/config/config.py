@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     smtp_from_email: str
     admin_id: str
     admin_password: str
+    supabase_url: str
+    supabase_key: str
 
     community_mail_id: str = ""
 

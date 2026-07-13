@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.database.database import get_db
@@ -8,6 +8,7 @@ from app.models import models
 from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
 from app.enum.enum import ResourceType, VoteType, UserRole
+from app.core.features.storage import upload_file_to_supabase
 
 router = APIRouter(
     prefix="/api/vault",
@@ -53,6 +54,22 @@ def get_departments(
     return db.query(models.Department).filter(
         models.Department.institution_id == current_user.institution_id
     ).order_by(models.Department.code.asc()).all()
+
+
+@router.post("/upload-file", status_code=status.HTTP_200_OK)
+async def upload_resource_file(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user)
+):
+    file_bytes = await file.read()
+    
+    file_url = upload_file_to_supabase(
+        file_bytes=file_bytes,
+        original_filename=file.filename,
+        content_type=file.content_type
+    )
+    
+    return {"success": True, "file_url": file_url}
 
 
 @router.post("/resources", response_model=schemas.ResourceResponse, status_code=status.HTTP_201_CREATED)

@@ -8,6 +8,7 @@ cffi==2.0.0
 charset-normalizer==3.4.7
 click==8.1.8
 cryptography==49.0.0
+deprecation==2.1.0
 dnspython==2.7.0
 ecdsa==0.19.2
 email-validator==2.3.0
@@ -17,9 +18,12 @@ fastapi-cli==0.0.22
 fastapi-cloud-cli==0.12.0
 fastar==0.11.0
 h11==0.16.0
+h2==4.3.0
+hpack==4.1.0
 httpcore==1.0.9
 httptools==0.8.0
 httpx==0.28.1
+hyperframe==6.1.0
 idna==3.18
 iniconfig==2.1.0
 itsdangerous==2.2.0
@@ -28,10 +32,13 @@ Mako==1.3.12
 markdown-it-py==3.0.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
+multidict==6.7.1
 orjson==3.11.5
 packaging==26.2
 passlib==1.7.4
 pluggy==1.6.0
+postgrest==2.31.0
+propcache==0.4.1
 psycopg==3.2.13
 psycopg-binary==3.2.13
 psycopg2-binary==2.9.12
@@ -42,11 +49,13 @@ pydantic-extra-types==2.11.1
 pydantic-settings==2.11.0
 pydantic_core==2.46.4
 Pygments==2.20.0
+PyJWT==2.13.0
 pytest==8.4.2
 python-dotenv==1.2.1
 python-jose==3.5.0
 python-multipart==0.0.20
 PyYAML==6.0.3
+realtime==2.31.0
 requests==2.32.5
 rich==15.0.0
 rich-toolkit==0.20.1
@@ -57,6 +66,11 @@ shellingham==1.5.4
 six==1.17.0
 SQLAlchemy==2.0.51
 starlette==0.49.3
+storage3==2.31.0
+StrEnum==0.4.15
+supabase==2.31.0
+supabase-auth==2.31.0
+supabase-functions==2.31.0
 tomli==2.4.1
 typer==0.23.2
 typing-inspection==0.4.2
@@ -67,3 +81,4 @@ uvicorn==0.39.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==15.0.1
+yarl==1.22.0
