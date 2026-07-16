@@ -146,6 +146,9 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
             detail="Incorrect email or password."
         )
     
+    if user.is_blocked:
+        raise HTTPException(status_code=403, detail="Your account has been blocked by the community head.")
+    
     if user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
