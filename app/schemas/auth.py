@@ -19,6 +19,7 @@ class UserResponse(BaseModel):
     last_name: str
     role: UserRole
     is_verified: bool
+    is_blocked: bool
     requires_password_change: bool = False
     karma: int
     institution_id: str

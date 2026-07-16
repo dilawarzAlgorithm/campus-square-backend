@@ -20,3 +20,8 @@ from app.schemas.vault import (
     ResourceResponse,
     VoteRequest
 )
+
+from app.schemas.community import (
+    MemberUpdateRoleRequest,
+    MemberBlockRequest
+)
