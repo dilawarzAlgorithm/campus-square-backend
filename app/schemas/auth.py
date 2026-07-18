@@ -12,6 +12,14 @@ class ProfileSchema(BaseModel):
         from_attributes = True
 
 
+class KarmaTierInfo(BaseModel):
+    level: int
+    title: str
+    next_tier_title: Optional[str] = None
+    points_to_next: Optional[int] = None
+    progress_percentage: float
+
+
 class UserResponse(BaseModel):
     id: str
     email: EmailStr
@@ -24,6 +32,7 @@ class UserResponse(BaseModel):
     karma: int
     institution_id: str
     profile: Optional[ProfileSchema] = None
+    karma_tier: Optional[KarmaTierInfo] = None
 
     class Config:
         from_attributes = True
@@ -77,6 +86,11 @@ class ChangePasswordResponse(BaseModel):
     user: UserResponse
 
 
+class UpdateNameRequest(BaseModel):
+    first_name: str
+    last_name: str
+
+    
 class ResendOtp(BaseModel):
     email: EmailStr
     password: str

@@ -9,7 +9,7 @@ from app.models import models
 from app.schemas import schemas
 from app.enum.enum import UserRole
 from app.core.config.config import settings
-from app.core.features.utils import hash, verify, extract_domain, generate_otp
+from app.core.features.utils import hash, verify, extract_domain, generate_otp, calculate_karma_tier
 from app.core.auth.oauth2 import create_access_token, REFRESH_TOKEN_EXPIRE_DAYS
 from app.core.features.mail import send_otp_email
 from app.core.auth.oauth2 import get_current_user
@@ -175,11 +175,28 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     db.add(db_refresh_token)
     db.commit()
 
+    karma_info = calculate_karma_tier(user.karma)
+    
+    user_response = schemas.UserResponse(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        role=user.role,
+        is_verified=user.is_verified,
+        is_blocked=user.is_blocked,
+        requires_password_change=user.requires_password_change,
+        karma=user.karma,
+        institution_id=user.institution_id,
+        profile=user.profile,
+        karma_tier=karma_info
+    )
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_token_str,
         "token_type": "bearer",
-        "user": user
+        "user": user_response
     }
 
 
@@ -264,12 +281,27 @@ def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     db.commit()
 
     user_data = schemas.UserResponse.model_validate(user)
+    karma_info = calculate_karma_tier(user_data.karma)
+    user_response = schemas.UserResponse(
+        id=user_data.id,
+        email=user_data.email,
+        first_name=user_data.first_name,
+        last_name=user_data.last_name,
+        role=user_data.role,
+        is_verified=user_data.is_verified,
+        is_blocked=user_data.is_blocked,
+        requires_password_change=user_data.requires_password_change,
+        karma=user_data.karma,
+        institution_id=user_data.institution_id,
+        profile=user_data.profile,
+        karma_tier=karma_info
+    )
 
     return {
         "access_token": access_token,
         "refresh_token": refresh_token_str,
         "token_type": "bearer",
-        "user": user_data
+        "user": user_response
     }
 
 
@@ -283,11 +315,70 @@ def change_password(payload: schemas.ChangePasswordRequest, current_user: models
     db.commit()
     db.refresh(current_user)
 
+    karma_info = calculate_karma_tier(current_user.karma)
+    user_response = schemas.UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        role=current_user.role,
+        is_verified=current_user.is_verified,
+        is_blocked=current_user.is_blocked,
+        requires_password_change=current_user.requires_password_change,
+        karma=current_user.karma,
+        institution_id=current_user.institution_id,
+        profile=current_user.profile,
+        karma_tier=karma_info
+    )
+
     return {
         "success": True, 
         "message": "Password updated successfully.",
-        "user": current_user
+        "user": user_response
     }
+
+
+@router.get("/me", response_model=schemas.UserResponse)
+def get_me(current_user: models.User = Depends(get_current_user)):
+    karma_info = calculate_karma_tier(current_user.karma)
+    return schemas.UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        role=current_user.role,
+        is_verified=current_user.is_verified,
+        is_blocked=current_user.is_blocked,
+        requires_password_change=current_user.requires_password_change,
+        karma=current_user.karma,
+        institution_id=current_user.institution_id,
+        profile=current_user.profile,
+        karma_tier=karma_info
+    )
+
+
+@router.patch("/name", response_model=schemas.UserResponse)
+def update_name(payload: schemas.UpdateNameRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    current_user.first_name = payload.first_name.strip()
+    current_user.last_name = payload.last_name.strip()
+    db.commit()
+    db.refresh(current_user)
+    
+    karma_info = calculate_karma_tier(current_user.karma)
+    return schemas.UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        role=current_user.role,
+        is_verified=current_user.is_verified,
+        is_blocked=current_user.is_blocked,
+        requires_password_change=current_user.requires_password_change,
+        karma=current_user.karma,
+        institution_id=current_user.institution_id,
+        profile=current_user.profile,
+        karma_tier=karma_info
+    )
 
 
 @router.post("/refresh", response_model=schemas.TokenRefreshResponse)

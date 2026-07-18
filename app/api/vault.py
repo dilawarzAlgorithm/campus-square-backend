@@ -235,3 +235,44 @@ def vote_resource(
     db.commit()
     db.refresh(resource)
     return resource
+
+
+@router.post("/resources/{resource_id}/save")
+def toggle_save_resource(
+    resource_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    existing = db.query(models.SavedResource).filter(
+        models.SavedResource.user_id == current_user.id,
+        models.SavedResource.resource_id == resource_id
+    ).first()
+    
+    if existing:
+        db.delete(existing)
+        db.commit()
+        return {"message": "Resource removed from saved", "is_saved": False}
+    else:
+        new_save = models.SavedResource(id=str(uuid.uuid4()), user_id=current_user.id, resource_id=resource_id)
+        db.add(new_save)
+        db.commit()
+        return {"message": "Resource saved", "is_saved": True}
+
+
+@router.get("/saved-resource-ids", response_model=List[str])
+def get_saved_resource_ids(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    saved = db.query(models.SavedResource).filter(models.SavedResource.user_id == current_user.id).all()
+    return [s.resource_id for s in saved]
+
+
+@router.get("/saved-resources", response_model=List[schemas.ResourceResponse])
+def get_saved_resources(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    saved = db.query(models.SavedResource).filter(models.SavedResource.user_id == current_user.id).all()
+    resource_ids = [s.resource_id for s in saved]
+    return db.query(models.AcademicResource).filter(models.AcademicResource.id.in_(resource_ids)).all()

@@ -10,6 +10,7 @@ from app.schemas.auth import (
     OTPVerificationRequest,
     ChangePasswordRequest,
     ChangePasswordResponse,
+    UpdateNameRequest,
     ResendOtp
 )
 

@@ -53,3 +53,14 @@ class ResourceVote(Base):
 
     user = relationship("User", back_populates="resource_votes")
     resource = relationship("AcademicResource", back_populates="votes")
+
+
+class SavedResource(Base):
+    __tablename__ = "saved_resources"
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    resource_id = Column(String, ForeignKey("academic_resources.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
+    
+    user = relationship("User")
+    resource = relationship("AcademicResource")
