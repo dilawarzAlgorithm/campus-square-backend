@@ -26,3 +26,11 @@ from app.schemas.community import (
     MemberUpdateRoleRequest,
     MemberBlockRequest
 )
+
+from app.schemas.square import (
+    NoticeAuthor,
+    CommentCreate,
+    CommentResponse,
+    NoticeCreate,
+    NoticeResponse
+)

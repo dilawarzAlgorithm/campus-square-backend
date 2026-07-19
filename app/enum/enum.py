@@ -26,3 +26,9 @@ class Semester(int, Enum):
     SEVEN = 7
     EIGHT = 8
 
+class SquareCategory(str, Enum):
+    NOTICE = "NOTICE"
+    ROOMMATE = "ROOMMATE"
+    RIDE_POOL = "RIDE_POOL"
+    LOST_FOUND = "LOST_FOUND"
+    EVENT = "EVENT"
