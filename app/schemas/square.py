@@ -14,15 +14,20 @@ class NoticeAuthor(BaseModel):
 
 class CommentCreate(BaseModel):
     text: str = Field(..., min_length=1, max_length=500)
+    parent_id: Optional[str] = None
 
 class CommentResponse(BaseModel):
     id: str
     text: str
     created_at: datetime
     author: NoticeAuthor
+    parent_id: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+class NestedCommentResponse(CommentResponse):
+    replies: List['NestedCommentResponse'] = []
 
 class NoticeCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=100)
@@ -43,7 +48,7 @@ class NoticeResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     author: NoticeAuthor
-    comments: List[CommentResponse] = []
+    comments: List[NestedCommentResponse] = []
 
     class Config:
         from_attributes = True

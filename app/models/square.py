@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, ForeignKey, Enum as SQLEnum, TIMESTAMP, text as sa_text
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
+
 from app.core.database.database import Base
 from app.enum.enum import SquareCategory
 
@@ -33,9 +34,13 @@ class NoticeComment(Base):
     id = Column(String, primary_key=True, index=True)
     text = Column(String, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=sa_text('now()'), nullable=False)
+
+    parent_id = Column(String, ForeignKey("notice_comments.id", ondelete="CASCADE"), nullable=True)
     
     notice_id = Column(String, ForeignKey("notices.id", ondelete="CASCADE"), nullable=False)
     author_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     notice = relationship("Notice", back_populates="comments")
     author = relationship("User")
+
+    replies = relationship("NoticeComment", backref=backref('parent', remote_side=[id]), cascade="all, delete-orphan")

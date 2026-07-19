@@ -101,12 +101,18 @@ def add_comment(
 
     if not notice:
         raise HTTPException(status_code=404, detail="Notice not found.")
+    
+    if payload.parent_id:
+        parent_comment = db.query(models.NoticeComment).filter(models.NoticeComment.id == payload.parent_id).first()
+        if not parent_comment:
+             raise HTTPException(status_code=404, detail="Parent comment not found.")
 
     new_comment = models.NoticeComment(
         id=str(uuid.uuid4()),
         text=payload.text.strip(),
         notice_id=notice.id,
-        author_id=current_user.id
+        author_id=current_user.id,
+        parent_id=payload.parent_id
     )
     
     db.add(new_comment)
