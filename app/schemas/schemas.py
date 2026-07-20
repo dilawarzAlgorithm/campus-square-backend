@@ -31,6 +31,14 @@ from app.schemas.square import (
     NoticeAuthor,
     CommentCreate,
     CommentResponse,
+    NestedCommentResponse,
     NoticeCreate,
     NoticeResponse
+)
+
+from app.schemas.chat import (
+    ChatUser,
+    MessageResponse,
+    ConversationParticipantResponse,
+    ConversationResponse
 )
