@@ -13,10 +13,10 @@ class Department(Base):
     code = Column(String, nullable=False)
     
     institution_id = Column(String, ForeignKey("institutions.id", ondelete="CASCADE"), nullable=False)
+    
     institution = relationship("Institution", back_populates="departments")
-
     resources = relationship("AcademicResource", back_populates="department", cascade="all, delete-orphan")
-
+    users = relationship("User", back_populates="department")
 
 class AcademicResource(Base):
     __tablename__ = "academic_resources"

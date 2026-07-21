@@ -13,11 +13,26 @@ from app.core.features.utils import hash, verify, extract_domain, generate_otp, 
 from app.core.auth.oauth2 import create_access_token, REFRESH_TOKEN_EXPIRE_DAYS
 from app.core.features.mail import send_otp_email
 from app.core.auth.oauth2 import get_current_user
+from app.schemas.vault import DepartmentResponse
 
 router = APIRouter(
     prefix="/api/auth",
     tags=["Authentication"]
 )
+
+@router.get("/departments-by-email", response_model=list[DepartmentResponse])
+def get_departments_by_email(email: str, db: Session = Depends(get_db)):
+    try:
+        domain = extract_domain(email)
+    except ValueError:
+        return []
+        
+    institution = db.query(models.Institution).filter(models.Institution.domain == domain).first()
+    if not institution:
+        return []
+        
+    return db.query(models.Department).filter(models.Department.institution_id == institution.id).order_by(models.Department.name.asc()).all()
+
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks , db: Session = Depends(get_db)):
@@ -68,6 +83,7 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         last_name=payload.last_name,
         role=payload.requested_role,
         institution_id=institution.id,
+        department_id=payload.department_id,
         is_verified=False,
         verification_otp=otp,
         otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
@@ -109,6 +125,27 @@ def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(ge
     user.is_verified = True
     user.verification_otp = None
     user.otp_expires_at = None
+
+    if user.department_id:
+        dept_conv = db.query(models.Conversation).filter(
+            models.Conversation.department_id == user.department_id,
+            models.Conversation.type == "DEPARTMENT"
+        ).first()
+        
+        if dept_conv:
+            existing = db.query(models.ConversationParticipant).filter(
+                models.ConversationParticipant.conversation_id == dept_conv.id,
+                models.ConversationParticipant.user_id == user.id
+            ).first()
+            
+            if not existing:
+                p = models.ConversationParticipant(
+                    id=str(uuid.uuid4()),
+                    conversation_id=dept_conv.id,
+                    user_id=user.id
+                )
+                db.add(p)
+
     db.commit()
 
     return {"success": True, "message": "Your account has been successfully verified! You can now log in."}
@@ -188,6 +225,7 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         requires_password_change=user.requires_password_change,
         karma=user.karma,
         institution_id=user.institution_id,
+        department_id=user.department_id,
         profile=user.profile,
         karma_tier=karma_info
     )
@@ -293,6 +331,7 @@ def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         requires_password_change=user_data.requires_password_change,
         karma=user_data.karma,
         institution_id=user_data.institution_id,
+        department_id=user_data.department_id,
         profile=user_data.profile,
         karma_tier=karma_info
     )
@@ -327,6 +366,7 @@ def change_password(payload: schemas.ChangePasswordRequest, current_user: models
         requires_password_change=current_user.requires_password_change,
         karma=current_user.karma,
         institution_id=current_user.institution_id,
+        department_id=current_user.department_id,
         profile=current_user.profile,
         karma_tier=karma_info
     )
@@ -352,6 +392,7 @@ def get_me(current_user: models.User = Depends(get_current_user)):
         requires_password_change=current_user.requires_password_change,
         karma=current_user.karma,
         institution_id=current_user.institution_id,
+        department_id=current_user.department_id,
         profile=current_user.profile,
         karma_tier=karma_info
     )
@@ -376,6 +417,7 @@ def update_name(payload: schemas.UpdateNameRequest, current_user: models.User = 
         requires_password_change=current_user.requires_password_change,
         karma=current_user.karma,
         institution_id=current_user.institution_id,
+        department_id=current_user.department_id,
         profile=current_user.profile,
         karma_tier=karma_info
     )

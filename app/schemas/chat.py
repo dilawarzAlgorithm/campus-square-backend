@@ -41,6 +41,7 @@ class ConversationParticipantResponse(BaseModel):
 class ConversationResponse(BaseModel):
     id: str
     type: str
+    name: Optional[str] = None
     created_at: datetime
     participants: List[ConversationParticipantResponse]
     last_message: Optional[MessageResponse] = None

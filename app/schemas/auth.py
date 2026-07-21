@@ -31,6 +31,7 @@ class UserResponse(BaseModel):
     requires_password_change: bool = False
     karma: int
     institution_id: str
+    department_id: Optional[str] = None
     profile: Optional[ProfileSchema] = None
     karma_tier: Optional[KarmaTierInfo] = None
 
@@ -66,6 +67,7 @@ class RegisterRequest(BaseModel):
     
     institution_name: Optional[str] = None
     institution_short_name: Optional[str] = None
+    department_id: Optional[str] = None
 
 
 class LoginRequest(BaseModel):

@@ -40,8 +40,10 @@ class User(Base):
     updated_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     institution_id = Column(String, ForeignKey("institutions.id", ondelete="CASCADE"), nullable=False)
-    institution = relationship("Institution", back_populates="users")
+    department_id = Column(String, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
 
+    institution = relationship("Institution", back_populates="users")
+    department = relationship("Department", back_populates="users")
     profile = relationship("Profile", uselist=False, back_populates="user", cascade="all, delete-orphan")
     
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")

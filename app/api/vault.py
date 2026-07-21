@@ -41,6 +41,30 @@ def create_department(
         institution_id=current_user.institution_id
     )
     db.add(new_dept)
+    db.flush()
+
+    new_conv = models.Conversation(
+        id=str(uuid.uuid4()),
+        type="DEPARTMENT",
+        name=f"{new_dept.code} Hub",
+        department_id=new_dept.id
+    )
+    db.add(new_conv)
+    db.flush()
+
+    staff_members = db.query(models.User).filter(
+        models.User.institution_id == current_user.institution_id,
+        models.User.role.in_([UserRole.COMMUNITY_HEAD, UserRole.ADMIN])
+    ).all()
+    
+    for staff in staff_members:
+        p = models.ConversationParticipant(
+            id=str(uuid.uuid4()),
+            conversation_id=new_conv.id,
+            user_id=staff.id
+        )
+        db.add(p)
+        
     db.commit()
     db.refresh(new_dept)
     return new_dept

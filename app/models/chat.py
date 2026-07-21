@@ -7,6 +7,8 @@ class Conversation(Base):
     __tablename__ = "conversations"
     id = Column(String, primary_key=True, index=True)
     type = Column(String, default="DM") # DM, GROUP, DEPARTMENT, etc.
+    name = Column(String, nullable=True)
+    department_id = Column(String, ForeignKey("departments.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     
     participants = relationship("ConversationParticipant", back_populates="conversation", cascade="all, delete-orphan")
