@@ -33,7 +33,6 @@ def get_departments_by_email(email: str, db: Session = Depends(get_db)):
         
     return db.query(models.Department).filter(models.Department.institution_id == institution.id).order_by(models.Department.name.asc()).all()
 
-
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks , db: Session = Depends(get_db)):
     try:
@@ -51,29 +50,31 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
             detail="A user with this email address is already registered."
         )
 
-    # Check or dynamically create the Institution (Bottom-Up Model)
     institution = db.query(models.Institution).filter(models.Institution.domain == domain).first()
     if not institution:
-        if not payload.institution_name or not payload.institution_short_name:
-            return {
-                "requires_onboarding": True,
-                "message": (
-                    f"It looks like you are the first user registering from @{domain}! "
-                    "To set up Campus Square for your campus, please provide the 'institution_name' and 'institution_short_name'."
-                )
-            }
-        
-        institution = models.Institution(
-            id=str(uuid.uuid4()),
-            name=payload.institution_name,
-            short_name=payload.institution_short_name,
-            domain=domain
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Your institution ({domain}) is not yet registered on Campus Square. Please contact your administrator."
         )
-        db.add(institution)
-        db.flush()
+    
+    if not payload.department_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A department selection is required. If your institution has no departments, please contact your Community Head to create one."
+        )
+    
+    dept = db.query(models.Department).filter(
+        models.Department.id == payload.department_id,
+        models.Department.institution_id == institution.id
+    ).first()
+
+    if not dept:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid department selected."
+        )
 
     otp = generate_otp()
-
     user_id = str(uuid.uuid4())
     new_user = models.User(
         id=user_id,
@@ -88,6 +89,7 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         verification_otp=otp,
         otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
     )
+
     db.add(new_user)
     db.flush()
 
@@ -106,19 +108,19 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         "user_id": new_user.id
     }
 
-
 @router.post("/verify-otp")
 def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
+    
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-
+    
     if user.is_verified:
         return {"message": "Email is already verified."}
 
     if user.verification_otp != payload.otp:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP code.")
-
+    
     if datetime.now(timezone.utc) > user.otp_expires_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired.")
 
@@ -147,9 +149,7 @@ def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(ge
                 db.add(p)
 
     db.commit()
-
     return {"success": True, "message": "Your account has been successfully verified! You can now log in."}
-
 
 @router.post("/resend-otp")
 def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db: Session = Depends(get_db)):
@@ -159,33 +159,35 @@ def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password."
     )
+    
     if user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Account is already verified. You can log in directly."
         )
+
     otp = generate_otp()
     user.verification_otp = otp
     user.otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
     db.commit()
     db.refresh(user)
+    
     background_task.add_task(send_otp_email, user.email, otp, user.first_name)
-
     return {"success": True, "message": "A new verification code has been sent."}
-
 
 @router.post("/login", response_model=schemas.Token)
 def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
+
     if not user or not verify(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password."
         )
-    
+        
     if user.is_blocked:
         raise HTTPException(status_code=403, detail="Your account has been blocked by the community head.")
-    
+        
     if user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -199,7 +201,6 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         )
 
     access_token = create_access_token(data={"sub": user.email})
-
     refresh_token_str = secrets.token_urlsafe(64)
     refresh_expires = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
@@ -237,73 +238,53 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         "user": user_response
     }
 
-
-@router.post("/login-staff")
-def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == payload.email).first()
-    if user:
-        if not verify(payload.password, user.password_hash):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
-        
-        if user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied. Not a staff member.")
-
-    else:
-        role_to_assign = None
-        
-        if payload.email == settings.admin_id and payload.password == settings.admin_password:
-            role_to_assign = UserRole.ADMIN
-        else:
-            community_creds = settings.get_community_credentials()
-            if payload.email in community_creds and payload.password == community_creds[payload.email]:
-                role_to_assign = UserRole.COMMUNITY_HEAD
-                
-        if not role_to_assign:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
-            
-        try:
-            domain = extract_domain(payload.email)
-        except ValueError:
-            domain = "system.local" # fallback
-
-        institution = db.query(models.Institution).filter(models.Institution.domain == domain).first()
-        
-        if not institution:
-            if not payload.institution_name or not payload.institution_short_name:
-                return {
-                    "requires_onboarding": True,
-                    "message": (
-                        f"Welcome to the portal! As a {role_to_assign.value}, "
-                        "please provide your Institution Full Name and Short Name to initialize your campus environment."
-                    )
-                }
-            
-            institution = models.Institution(
+def create_initial_admin(db: Session):
+    """Ensures the global admin exists in the database on startup or login attempt."""
+    admin_user = db.query(models.User).filter(models.User.email == settings.admin_id).first()
+    if not admin_user:
+        sys_inst = db.query(models.Institution).filter(models.Institution.domain == "system.local").first()
+        if not sys_inst:
+            sys_inst = models.Institution(
                 id=str(uuid.uuid4()),
-                name=payload.institution_name,
-                short_name=payload.institution_short_name,
-                domain=domain
+                name="System Administration",
+                short_name="SYSTEM",
+                domain="system.local"
             )
-            db.add(institution)
+            db.add(sys_inst)
             db.flush()
-            
-        user = models.User(
+
+        admin_user = models.User(
             id=str(uuid.uuid4()),
-            email=payload.email,
-            password_hash=hash(payload.password),
-            first_name="System",
-            last_name="Staff",
-            role=role_to_assign,
-            institution_id=institution.id,
+            email=settings.admin_id,
+            password_hash=hash(settings.admin_password),
+            first_name="Global",
+            last_name="Admin",
+            role=UserRole.ADMIN,
+            institution_id=sys_inst.id,
             is_verified=True, 
             requires_password_change=True
         )
-        db.add(user)
+        db.add(admin_user)
+        db.flush()
         
-        new_profile = models.Profile(id=str(uuid.uuid4()), user_id=user.id)
+        new_profile = models.Profile(id=str(uuid.uuid4()), user_id=admin_user.id)
         db.add(new_profile)
         db.commit()
-        db.refresh(user)
+    return admin_user
+
+@router.post("/login-staff")
+def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
+    
+    if payload.email == settings.admin_id:
+        create_initial_admin(db)
+
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+
+    if not user or not verify(payload.password, user.password_hash):
+         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
+         
+    if user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied. Not a staff member.")
 
     access_token = create_access_token(data={"sub": user.email})
     refresh_token_str = secrets.token_urlsafe(64)
@@ -320,6 +301,7 @@ def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 
     user_data = schemas.UserResponse.model_validate(user)
     karma_info = calculate_karma_tier(user_data.karma)
+
     user_response = schemas.UserResponse(
         id=user_data.id,
         email=user_data.email,
@@ -349,12 +331,16 @@ def change_password(payload: schemas.ChangePasswordRequest, current_user: models
     if not verify(payload.old_password, current_user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect old password.")
     
+    if verify(payload.new_password, current_user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Old and same passwords can't be same.")
+        
     current_user.password_hash = hash(payload.new_password)
     current_user.requires_password_change = False
     db.commit()
     db.refresh(current_user)
 
     karma_info = calculate_karma_tier(current_user.karma)
+
     user_response = schemas.UserResponse(
         id=current_user.id,
         email=current_user.email,
@@ -377,10 +363,10 @@ def change_password(payload: schemas.ChangePasswordRequest, current_user: models
         "user": user_response
     }
 
-
 @router.get("/me", response_model=schemas.UserResponse)
 def get_me(current_user: models.User = Depends(get_current_user)):
     karma_info = calculate_karma_tier(current_user.karma)
+
     return schemas.UserResponse(
         id=current_user.id,
         email=current_user.email,
@@ -396,16 +382,17 @@ def get_me(current_user: models.User = Depends(get_current_user)):
         profile=current_user.profile,
         karma_tier=karma_info
     )
-
 
 @router.patch("/name", response_model=schemas.UserResponse)
 def update_name(payload: schemas.UpdateNameRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     current_user.first_name = payload.first_name.strip()
     current_user.last_name = payload.last_name.strip()
+
     db.commit()
     db.refresh(current_user)
     
     karma_info = calculate_karma_tier(current_user.karma)
+
     return schemas.UserResponse(
         id=current_user.id,
         email=current_user.email,
@@ -421,7 +408,6 @@ def update_name(payload: schemas.UpdateNameRequest, current_user: models.User = 
         profile=current_user.profile,
         karma_tier=karma_info
     )
-
 
 @router.post("/refresh", response_model=schemas.TokenRefreshResponse)
 def refresh(payload: schemas.TokenRefreshRequest, db: Session = Depends(get_db)):
@@ -463,6 +449,7 @@ def refresh(payload: schemas.TokenRefreshRequest, db: Session = Depends(get_db))
     db.add(new_db_token)
 
     new_access_token = create_access_token(data={"sub": user.email})
+
     db.commit()
 
     return {

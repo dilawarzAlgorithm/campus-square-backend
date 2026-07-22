@@ -21,6 +21,12 @@ def create_department(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    if current_user.role not in [UserRole.COMMUNITY_HEAD, UserRole.ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Community Heads and Administrators can create departments."
+        )
+    
     dept_code = payload.code.strip().upper()
 
     existing_dept = db.query(models.Department).filter(
@@ -64,7 +70,7 @@ def create_department(
             user_id=staff.id
         )
         db.add(p)
-        
+
     db.commit()
     db.refresh(new_dept)
     return new_dept

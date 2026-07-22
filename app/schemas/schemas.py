@@ -11,7 +11,10 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     ChangePasswordResponse,
     UpdateNameRequest,
-    ResendOtp
+    ResendOtp,
+    InstitutionCreateRequest,
+    InstitutionResponse,
+    KarmaTierInfo
 )
 
 from app.schemas.vault import (
