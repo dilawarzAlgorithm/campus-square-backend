@@ -12,11 +12,13 @@ class Institution(Base):
     name = Column(String, nullable=False)
     short_name = Column(String, nullable=False)
     domain = Column(String, unique=True, index=True, nullable=False)
+    extract_roll_from_email = Column(Boolean, default=False, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     users = relationship("User", back_populates="institution", cascade="all, delete-orphan")
     departments = relationship("Department", back_populates="institution", cascade="all, delete-orphan")
+
 
 class User(Base):
     __tablename__ = "users"
@@ -26,29 +28,33 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
+    roll_number = Column(String, nullable=True)
     role = Column(SQLEnum(UserRole), default=UserRole.STUDENT, nullable=False)
     is_verified = Column(Boolean, default=False)
-    
     is_blocked = Column(Boolean, default=False) 
     requires_password_change = Column(Boolean, default=False)
-    
     verification_otp = Column(String, nullable=True)
     otp_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    
     karma = Column(Integer, default=0)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
-
     institution_id = Column(String, ForeignKey("institutions.id", ondelete="CASCADE"), nullable=False)
     department_id = Column(String, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
-
     institution = relationship("Institution", back_populates="users")
     department = relationship("Department", back_populates="users")
     profile = relationship("Profile", uselist=False, back_populates="user", cascade="all, delete-orphan")
-    
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     uploaded_resources = relationship("AcademicResource", back_populates="uploader", cascade="all, delete-orphan")
     resource_votes = relationship("ResourceVote", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def institution_name(self):
+        return self.institution.name if self.institution else None
+
+    @property
+    def department_name(self):
+        return self.department.name if self.department else None
+
 
 class Profile(Base):
     __tablename__ = "profiles"

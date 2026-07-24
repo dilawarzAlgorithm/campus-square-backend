@@ -1,6 +1,5 @@
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
-
 from app.enum.enum import UserRole
 from datetime import datetime
 
@@ -24,12 +23,15 @@ class UserResponse(BaseModel):
     first_name: str
     last_name: str
     role: UserRole
+    roll_number: Optional[str] = None
     is_verified: bool
     is_blocked: bool
     requires_password_change: bool = False
     karma: int
     institution_id: Optional[str] = None
+    institution_name: Optional[str] = None
     department_id: Optional[str] = None
+    department_name: Optional[str] = None
     profile: Optional[ProfileSchema] = None
     karma_tier: Optional[KarmaTierInfo] = None
     class Config:
@@ -77,6 +79,11 @@ class UpdateNameRequest(BaseModel):
     first_name: str
     last_name: str
     
+class UpdateProfileRequest(BaseModel):
+    dietary_preference: Optional[str] = None
+    sleep_schedule: Optional[str] = None
+    study_habits: Optional[str] = None
+
 class ResendOtp(BaseModel):
     email: EmailStr
     password: str
@@ -99,6 +106,7 @@ class InstitutionResponse(BaseModel):
     name: str
     short_name: str
     domain: str
+    extract_roll_from_email: bool
     created_at: datetime
     updated_at: datetime
     is_blocked: bool = False

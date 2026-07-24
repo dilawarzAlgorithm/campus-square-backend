@@ -2,12 +2,14 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 from datetime import datetime
 from app.enum.enum import SquareCategory, UserRole
+from app.schemas.auth import ProfileSchema
 
 class NoticeAuthor(BaseModel):
     id: str
     first_name: str
     last_name: str
     role: UserRole
+    profile: Optional[ProfileSchema] = None
 
     class Config:
         from_attributes = True
