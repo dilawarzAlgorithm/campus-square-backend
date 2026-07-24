@@ -19,6 +19,7 @@ class ConversationParticipant(Base):
     id = Column(String, primary_key=True, index=True)
     conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    is_blocked = Column(Boolean, default=False)
     
     conversation = relationship("Conversation", back_populates="participants")
     user = relationship("User")

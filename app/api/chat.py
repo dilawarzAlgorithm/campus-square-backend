@@ -9,6 +9,7 @@ from sqlalchemy import or_, and_
 from app.core.database.database import get_db
 from app.models import models
 from app.schemas import schemas
+from app.enum.enum import UserRole
 from app.core.auth.oauth2 import get_current_user, verify_access_token
 
 router = APIRouter(
@@ -200,6 +201,75 @@ async def get_my_conversations(
     )
     return conversations
 
+@router.patch("/conversations/{conversation_id}/participants/{user_id}/block")
+async def block_participant(conversation_id: str, user_id: str, payload: dict, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
+        raise HTTPException(status_code=403, detail="Not authorized.")
+    
+    participant = db.query(models.ConversationParticipant).filter_by(
+        conversation_id=conversation_id, user_id=user_id
+    ).first()
+    
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+        
+    participant.is_blocked = payload.get("is_blocked", True)
+    db.commit()
+    
+    await manager.broadcast_to_conversation(conversation_id, {
+        "type": "participant_blocked",
+        "user_id": user_id,
+        "is_blocked": participant.is_blocked
+    })
+    return {"success": True, "is_blocked": participant.is_blocked}
+
+@router.post("/conversations/{conversation_id}/messages")
+async def forward_message(conversation_id: str, payload: dict, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    participant = db.query(models.ConversationParticipant).filter_by(
+        conversation_id=conversation_id, user_id=current_user.id
+    ).first()
+    
+    if not participant or participant.is_blocked:
+        raise HTTPException(status_code=403, detail="Not authorized or blocked from this chat")
+        
+    new_msg = models.Message(
+        id=str(uuid.uuid4()),
+        conversation_id=conversation_id,
+        sender_id=current_user.id,
+        content=payload.get("content", ""),
+        reply_to_id=payload.get("reply_to_id")
+    )
+    db.add(new_msg)
+    db.commit()
+    db.refresh(new_msg)
+    
+    message_data = {
+        "type": "new_message",
+        "message": {
+            "id": new_msg.id,
+            "conversation_id": new_msg.conversation_id,
+            "content": new_msg.content,
+            "created_at": new_msg.created_at.isoformat(),
+            "is_delivered": new_msg.is_delivered,
+            "is_read": new_msg.is_read,
+            "is_deleted": new_msg.is_deleted,
+            "sender": {
+                "id": current_user.id,
+                "first_name": current_user.first_name,
+                "last_name": current_user.last_name,
+                "role": current_user.role.value,
+            }
+        }
+    }
+    await manager.broadcast_to_conversation(conversation_id, message_data)
+    
+    participants = db.query(models.ConversationParticipant).filter_by(conversation_id=conversation_id).all()
+    for p in participants:
+        if p.user_id != current_user.id:
+            await manager.broadcast_to_user_hub(p.user_id, message_data)
+            
+    return {"success": True}
+
 @router.get("/unread-count")
 async def get_global_unread_count(
     current_user: models.User = Depends(get_current_user),
@@ -310,6 +380,13 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
             try:
                 payload = json.loads(raw_data)
                 action = payload.get("type")
+
+                if action in ["message", "typing", "edit_message"]:
+                    participant = db.query(models.ConversationParticipant).filter_by(
+                        conversation_id=conversation_id, user_id=user.id
+                    ).first()
+                    if participant and participant.is_blocked:
+                        continue
                 
                 if action == "message":
                     new_message = models.Message(
