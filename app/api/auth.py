@@ -22,6 +22,7 @@ router = APIRouter(
 
 @router.get("/departments-by-email", response_model=list[DepartmentResponse])
 def get_departments_by_email(email: str, db: Session = Depends(get_db)):
+    email = email.lower()
     try:
         domain = extract_domain(email)
     except ValueError:
@@ -35,6 +36,8 @@ def get_departments_by_email(email: str, db: Session = Depends(get_db)):
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks , db: Session = Depends(get_db)):
+    payload.email = payload.email.lower()
+    
     try:
         domain = extract_domain(payload.email)
     except ValueError:
@@ -56,13 +59,13 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Your institution ({domain}) is not yet registered on Campus Square. Please contact your administrator."
         )
-    
+
     if not payload.department_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A department selection is required. If your institution has no departments, please contact your Community Head to create one."
         )
-    
+
     dept = db.query(models.Department).filter(
         models.Department.id == payload.department_id,
         models.Department.institution_id == institution.id
@@ -74,6 +77,10 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
             detail="Invalid department selected."
         )
 
+    roll_number = None
+    if institution.extract_roll_from_email and payload.requested_role == UserRole.STUDENT:
+        roll_number = payload.email.split('@')[0].upper()
+
     otp = generate_otp()
     user_id = str(uuid.uuid4())
     new_user = models.User(
@@ -82,6 +89,7 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         password_hash=hash(payload.password),
         first_name=payload.first_name,
         last_name=payload.last_name,
+        roll_number=roll_number,
         role=payload.requested_role,
         institution_id=institution.id,
         department_id=payload.department_id,
@@ -110,6 +118,7 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
 
 @router.post("/verify-otp")
 def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(get_db)):
+    payload.email = payload.email.lower()
     user = db.query(models.User).filter(models.User.email == payload.email).first()
     
     if not user:
@@ -153,6 +162,7 @@ def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(ge
 
 @router.post("/resend-otp")
 def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db: Session = Depends(get_db)):
+    payload.email = payload.email.lower()
     user = db.query(models.User).filter(models.User.email == payload.email).first()
     if not user or not verify(payload.password, user.password_hash):
         raise HTTPException(
@@ -177,6 +187,7 @@ def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db:
 
 @router.post("/login", response_model=schemas.Token)
 def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
+    payload.email = payload.email.lower()
     user = db.query(models.User).filter(models.User.email == payload.email).first()
 
     if not user or not verify(payload.password, user.password_hash):
@@ -214,22 +225,8 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     db.commit()
 
     karma_info = calculate_karma_tier(user.karma)
-    
-    user_response = schemas.UserResponse(
-        id=user.id,
-        email=user.email,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        role=user.role,
-        is_verified=user.is_verified,
-        is_blocked=user.is_blocked,
-        requires_password_change=user.requires_password_change,
-        karma=user.karma,
-        institution_id=user.institution_id,
-        department_id=user.department_id,
-        profile=user.profile,
-        karma_tier=karma_info
-    )
+    user_response = schemas.UserResponse.model_validate(user)
+    user_response.karma_tier = karma_info
 
     return {
         "access_token": access_token,
@@ -239,8 +236,7 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     }
 
 def create_initial_admin(db: Session):
-    """Ensures the global admin exists in the database on startup or login attempt."""
-    admin_user = db.query(models.User).filter(models.User.email == settings.admin_id).first()
+    admin_user = db.query(models.User).filter(models.User.email == settings.admin_id.lower()).first()
     if not admin_user:
         sys_inst = db.query(models.Institution).filter(models.Institution.domain == "system.local").first()
         if not sys_inst:
@@ -255,7 +251,7 @@ def create_initial_admin(db: Session):
 
         admin_user = models.User(
             id=str(uuid.uuid4()),
-            email=settings.admin_id,
+            email=settings.admin_id.lower(),
             password_hash=hash(settings.admin_password),
             first_name="Global",
             last_name="Admin",
@@ -274,8 +270,8 @@ def create_initial_admin(db: Session):
 
 @router.post("/login-staff")
 def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
-    
-    if payload.email == settings.admin_id:
+    payload.email = payload.email.lower()
+    if payload.email == settings.admin_id.lower():
         create_initial_admin(db)
 
     user = db.query(models.User).filter(models.User.email == payload.email).first()
@@ -299,24 +295,9 @@ def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     db.add(db_refresh_token)
     db.commit()
 
-    user_data = schemas.UserResponse.model_validate(user)
-    karma_info = calculate_karma_tier(user_data.karma)
-
-    user_response = schemas.UserResponse(
-        id=user_data.id,
-        email=user_data.email,
-        first_name=user_data.first_name,
-        last_name=user_data.last_name,
-        role=user_data.role,
-        is_verified=user_data.is_verified,
-        is_blocked=user_data.is_blocked,
-        requires_password_change=user_data.requires_password_change,
-        karma=user_data.karma,
-        institution_id=user_data.institution_id,
-        department_id=user_data.department_id,
-        profile=user_data.profile,
-        karma_tier=karma_info
-    )
+    karma_info = calculate_karma_tier(user.karma)
+    user_response = schemas.UserResponse.model_validate(user)
+    user_response.karma_tier = karma_info
 
     return {
         "access_token": access_token,
@@ -340,22 +321,8 @@ def change_password(payload: schemas.ChangePasswordRequest, current_user: models
     db.refresh(current_user)
 
     karma_info = calculate_karma_tier(current_user.karma)
-
-    user_response = schemas.UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        first_name=current_user.first_name,
-        last_name=current_user.last_name,
-        role=current_user.role,
-        is_verified=current_user.is_verified,
-        is_blocked=current_user.is_blocked,
-        requires_password_change=current_user.requires_password_change,
-        karma=current_user.karma,
-        institution_id=current_user.institution_id,
-        department_id=current_user.department_id,
-        profile=current_user.profile,
-        karma_tier=karma_info
-    )
+    user_response = schemas.UserResponse.model_validate(current_user)
+    user_response.karma_tier = karma_info
 
     return {
         "success": True, 
@@ -366,22 +333,9 @@ def change_password(payload: schemas.ChangePasswordRequest, current_user: models
 @router.get("/me", response_model=schemas.UserResponse)
 def get_me(current_user: models.User = Depends(get_current_user)):
     karma_info = calculate_karma_tier(current_user.karma)
-
-    return schemas.UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        first_name=current_user.first_name,
-        last_name=current_user.last_name,
-        role=current_user.role,
-        is_verified=current_user.is_verified,
-        is_blocked=current_user.is_blocked,
-        requires_password_change=current_user.requires_password_change,
-        karma=current_user.karma,
-        institution_id=current_user.institution_id,
-        department_id=current_user.department_id,
-        profile=current_user.profile,
-        karma_tier=karma_info
-    )
+    user_response = schemas.UserResponse.model_validate(current_user)
+    user_response.karma_tier = karma_info
+    return user_response
 
 @router.patch("/name", response_model=schemas.UserResponse)
 def update_name(payload: schemas.UpdateNameRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -392,22 +346,33 @@ def update_name(payload: schemas.UpdateNameRequest, current_user: models.User = 
     db.refresh(current_user)
     
     karma_info = calculate_karma_tier(current_user.karma)
+    user_response = schemas.UserResponse.model_validate(current_user)
+    user_response.karma_tier = karma_info
+    return user_response
 
-    return schemas.UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        first_name=current_user.first_name,
-        last_name=current_user.last_name,
-        role=current_user.role,
-        is_verified=current_user.is_verified,
-        is_blocked=current_user.is_blocked,
-        requires_password_change=current_user.requires_password_change,
-        karma=current_user.karma,
-        institution_id=current_user.institution_id,
-        department_id=current_user.department_id,
-        profile=current_user.profile,
-        karma_tier=karma_info
-    )
+@router.patch("/profile", response_model=schemas.UserResponse)
+def update_profile(payload: schemas.UpdateProfileRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    import uuid
+    if not current_user.profile:
+        new_profile = models.Profile(id=str(uuid.uuid4()), user_id=current_user.id)
+        db.add(new_profile)
+        db.flush()
+        current_user.profile = new_profile
+
+    if payload.dietary_preference is not None:
+        current_user.profile.dietary_preference = payload.dietary_preference.strip()
+    if payload.sleep_schedule is not None:
+        current_user.profile.sleep_schedule = payload.sleep_schedule.strip()
+    if payload.study_habits is not None:
+        current_user.profile.study_habits = payload.study_habits.strip()
+
+    db.commit()
+    db.refresh(current_user)
+    
+    karma_info = calculate_karma_tier(current_user.karma)
+    user_response = schemas.UserResponse.model_validate(current_user)
+    user_response.karma_tier = karma_info
+    return user_response
 
 @router.post("/refresh", response_model=schemas.TokenRefreshResponse)
 def refresh(payload: schemas.TokenRefreshRequest, db: Session = Depends(get_db)):

@@ -2,6 +2,7 @@ import uuid
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
 from app.core.database.database import get_db
 from app.models import models
 from app.schemas import schemas
@@ -46,6 +47,9 @@ def add_institution_and_head(
     current_user: models.User = Depends(require_admin), 
     db: Session = Depends(get_db)
 ):
+    payload.domain = payload.domain.lower()
+    payload.head_email = payload.head_email.lower()
+
     if db.query(models.Institution).filter(models.Institution.domain == payload.domain).first():
         raise HTTPException(status_code=400, detail="An institution with this domain already exists.")
         
