@@ -7,6 +7,7 @@ from app.models import models
 from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
 from app.enum.enum import SquareCategory, UserRole
+from app.core.features.storage import delete_file_from_supabase
 
 router = APIRouter(
     prefix="/api/square",
@@ -70,21 +71,28 @@ def delete_notice(
         models.Notice.id == notice_id,
         models.Notice.institution_id == current_user.institution_id
     ).first()
-
+    
     if not notice:
         raise HTTPException(status_code=404, detail="Notice not found.")
-
+        
     is_owner = notice.author_id == current_user.id
     is_staff = current_user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]
-
+    
     if not (is_owner or is_staff):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Not authorized to delete this post."
         )
+        
+    image_url = notice.image_url
+    file_url = notice.file_url
 
     db.delete(notice)
     db.commit()
+
+    delete_file_from_supabase(image_url)
+    delete_file_from_supabase(file_url)
+    
     return {"success": True, "message": "Post deleted successfully."}
 
 @router.post("/notices/{notice_id}/comments", response_model=schemas.CommentResponse, status_code=status.HTTP_201_CREATED)

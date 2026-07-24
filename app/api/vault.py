@@ -8,7 +8,7 @@ from app.models import models
 from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
 from app.enum.enum import ResourceType, VoteType, UserRole
-from app.core.features.storage import upload_file_to_supabase
+from app.core.features.storage import upload_file_to_supabase, delete_file_from_supabase
 
 router = APIRouter(
     prefix="/api/vault",
@@ -138,6 +138,52 @@ def upload_resource(
     return new_resource
 
 
+@router.patch("/resources/{resource_id}", response_model=schemas.ResourceResponse)
+def update_resource(
+    resource_id: str,
+    payload: schemas.ResourceUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    resource = db.query(models.AcademicResource).join(models.Department).filter(
+        models.AcademicResource.id == resource_id,
+        models.Department.institution_id == current_user.institution_id
+    ).first()
+
+    if not resource:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The requested academic resource does not exist or belongs to another institution."
+        )
+
+    if resource.uploader_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to update this resource."
+        )
+
+    if payload.title is not None:
+        resource.title = payload.title.strip()
+    if payload.description is not None:
+        resource.description = payload.description.strip() if payload.description else None
+    if payload.resource_type is not None:
+        resource.resource_type = payload.resource_type
+    if payload.semester is not None:
+        resource.semester = payload.semester
+    if payload.department_id is not None:
+        dept = db.query(models.Department).filter(
+            models.Department.id == payload.department_id,
+            models.Department.institution_id == current_user.institution_id
+        ).first()
+        if not dept:
+            raise HTTPException(status_code=400, detail="Invalid target department.")
+        resource.department_id = payload.department_id
+
+    db.commit()
+    db.refresh(resource)
+    return resource
+
+
 @router.get("/resources", response_model=List[schemas.ResourceResponse])
 def get_resources(
     department_id: Optional[str] = None,
@@ -163,7 +209,19 @@ def get_resources(
     else:
         query = query.order_by(models.AcademicResource.upvote_count.desc(), models.AcademicResource.created_at.desc())
 
-    return query.all()
+    resources = query.all()
+
+    resource_ids = [r.id for r in resources]
+    user_votes = db.query(models.ResourceVote).filter(
+        models.ResourceVote.user_id == current_user.id,
+        models.ResourceVote.resource_id.in_(resource_ids)
+    ).all()
+    
+    vote_map = {v.resource_id: v.vote_type for v in user_votes}
+    for r in resources:
+        setattr(r, 'my_vote', vote_map.get(r.id))
+        
+    return resources
 
 @router.delete("/resources/{resource_id}", status_code=status.HTTP_200_OK)
 def delete_resource(
@@ -175,22 +233,26 @@ def delete_resource(
         models.AcademicResource.id == resource_id,
         models.Department.institution_id == current_user.institution_id
     ).first()
-
+    
     if not resource:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="The requested academic resource does not exist or belongs to another institution."
         )
-
+        
     if resource.uploader_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to delete this resource."
         )
+        
+    file_url = resource.file_url
 
     db.delete(resource)
     db.commit()
 
+    delete_file_from_supabase(file_url)
+    
     return {"success": True, "message": "Resource successfully deleted."}
 
 @router.post("/resources/{resource_id}/vote", response_model=schemas.ResourceResponse)
@@ -264,6 +326,14 @@ def vote_resource(
 
     db.commit()
     db.refresh(resource)
+
+    final_vote = db.query(models.ResourceVote).filter(
+        models.ResourceVote.user_id == current_user.id,
+        models.ResourceVote.resource_id == resource_id
+    ).first()
+    
+    setattr(resource, 'my_vote', final_vote.vote_type if final_vote else None)
+
     return resource
 
 
@@ -305,4 +375,20 @@ def get_saved_resources(
 ):
     saved = db.query(models.SavedResource).filter(models.SavedResource.user_id == current_user.id).all()
     resource_ids = [s.resource_id for s in saved]
-    return db.query(models.AcademicResource).filter(models.AcademicResource.id.in_(resource_ids)).all()
+
+    if not resource_ids:
+        return []
+    
+    resources = db.query(models.AcademicResource).filter(models.AcademicResource.id.in_(resource_ids)).all()
+
+    resource_ids = [r.id for r in resources]
+    user_votes = db.query(models.ResourceVote).filter(
+        models.ResourceVote.user_id == current_user.id,
+        models.ResourceVote.resource_id.in_(resource_ids)
+    ).all()
+    
+    vote_map = {v.resource_id: v.vote_type for v in user_votes}
+    for r in resources:
+        setattr(r, 'my_vote', vote_map.get(r.id))
+
+    return resources

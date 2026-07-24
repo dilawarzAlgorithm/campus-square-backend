@@ -11,6 +11,7 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     ChangePasswordResponse,
     UpdateNameRequest,
+    UpdateProfileRequest,
     ResendOtp,
     InstitutionCreateRequest,
     InstitutionResponse,
@@ -21,13 +22,16 @@ from app.schemas.vault import (
     DepartmentCreate,
     DepartmentResponse,
     ResourceCreate,
+    ResourceUpdate,
     ResourceResponse,
     VoteRequest
 )
 
 from app.schemas.community import (
     MemberUpdateRoleRequest,
-    MemberBlockRequest
+    MemberBlockRequest,
+    RollNumberUpdateRequest,
+    AutoRollNumberRequest
 )
 
 from app.schemas.square import (

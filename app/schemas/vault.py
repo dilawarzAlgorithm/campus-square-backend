@@ -24,6 +24,13 @@ class ResourceCreate(BaseModel):
     semester: int = Field(..., ge=1, le=8, description="Academic semester value ranging from 1 to 8")
     department_id: str
 
+class ResourceUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=3, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    resource_type: Optional[ResourceType] = None
+    semester: Optional[int] = Field(None, ge=1, le=8)
+    department_id: Optional[str] = None
+
 class ResourceResponse(BaseModel):
     id: str
     title: str
@@ -35,6 +42,7 @@ class ResourceResponse(BaseModel):
     downvote_count: int
     department_id: str
     uploader_id: str
+    my_vote: Optional[VoteType] = None
 
     class Config:
         from_attributes = True
