@@ -30,19 +30,28 @@ class User(Base):
     last_name = Column(String, nullable=False)
     roll_number = Column(String, nullable=True)
     role = Column(SQLEnum(UserRole), default=UserRole.STUDENT, nullable=False)
+
     is_verified = Column(Boolean, default=False)
     is_blocked = Column(Boolean, default=False) 
     requires_password_change = Column(Boolean, default=False)
+
+    is_online = Column(Boolean, default=False)
+    last_seen = Column(TIMESTAMP(timezone=True), nullable=True)
+    
     verification_otp = Column(String, nullable=True)
     otp_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
     karma = Column(Integer, default=0)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    
     institution_id = Column(String, ForeignKey("institutions.id", ondelete="CASCADE"), nullable=False)
     department_id = Column(String, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
     institution = relationship("Institution", back_populates="users")
     department = relationship("Department", back_populates="users")
+    
     profile = relationship("Profile", uselist=False, back_populates="user", cascade="all, delete-orphan")
+    
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     uploaded_resources = relationship("AcademicResource", back_populates="uploader", cascade="all, delete-orphan")
     resource_votes = relationship("ResourceVote", back_populates="user", cascade="all, delete-orphan")

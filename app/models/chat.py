@@ -32,8 +32,10 @@ class Message(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     
     reply_to_id = Column(String, ForeignKey("messages.id", ondelete="SET NULL"), nullable=True)
+    is_delivered = Column(Boolean, default=False)
     is_read = Column(Boolean, default=False)
     is_deleted = Column(Boolean, default=False)
+    is_edited = Column(Boolean, default=False)
     
     conversation = relationship("Conversation", back_populates="messages")
     sender = relationship("User")

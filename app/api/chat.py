@@ -19,6 +19,8 @@ router = APIRouter(
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, List[WebSocket]] = {}
+        self.hub_connections: Dict[str, List[WebSocket]] = {}
+        self.user_connections_count: Dict[str, int] = {}
 
     async def connect(self, websocket: WebSocket, conversation_id: str):
         await websocket.accept()
@@ -31,14 +33,79 @@ class ConnectionManager:
             self.active_connections[conversation_id].remove(websocket)
             if not self.active_connections[conversation_id]:
                 del self.active_connections[conversation_id]
+                
+    async def connect_hub(self, websocket: WebSocket, user_id: str):
+        await websocket.accept()
+        if user_id not in self.hub_connections:
+            self.hub_connections[user_id] = []
+        self.hub_connections[user_id].append(websocket)
+
+    def disconnect_hub(self, websocket: WebSocket, user_id: str):
+        if user_id in self.hub_connections:
+            self.hub_connections[user_id].remove(websocket)
+            if not self.hub_connections[user_id]:
+                del self.hub_connections[user_id]
 
     async def broadcast_to_conversation(self, conversation_id: str, message_data: dict):
         if conversation_id in self.active_connections:
             for connection in self.active_connections[conversation_id]:
-                await connection.send_json(message_data)
+                try:
+                    await connection.send_json(message_data)
+                except Exception:
+                    pass
+                    
+    async def broadcast_to_user_hub(self, user_id: str, message_data: dict):
+        if user_id in self.hub_connections:
+            for connection in self.hub_connections[user_id]:
+                try:
+                    await connection.send_json(message_data)
+                except Exception:
+                    pass
+
+    async def broadcast_presence(self, user_id: str, is_online: bool, last_seen: datetime, db: Session):
+        participants = db.query(models.ConversationParticipant).filter(
+            models.ConversationParticipant.user_id == user_id
+        ).all()
+        conv_ids = [p.conversation_id for p in participants]
+        
+        presence_data = {
+            "type": "user_presence",
+            "user_id": user_id,
+            "is_online": is_online,
+            "last_seen": last_seen.isoformat() if last_seen else None
+        }
+        
+        for cid in conv_ids:
+            await self.broadcast_to_conversation(cid, presence_data)
+            
+        co_participants = db.query(models.ConversationParticipant.user_id).filter(
+            models.ConversationParticipant.conversation_id.in_(conv_ids),
+            models.ConversationParticipant.user_id != user_id
+        ).distinct().all()
+        
+        for (uid,) in co_participants:
+            await self.broadcast_to_user_hub(uid, presence_data)
 
 manager = ConnectionManager()
 
+async def handle_connect(user: models.User, db: Session):
+    manager.user_connections_count[user.id] = manager.user_connections_count.get(user.id, 0) + 1
+    if manager.user_connections_count[user.id] == 1:
+        user.is_online = True
+        db.commit()
+        await manager.broadcast_presence(user.id, True, None, db)
+
+async def handle_disconnect(user: models.User, db: Session):
+    if user.id in manager.user_connections_count:
+        manager.user_connections_count[user.id] = max(0, manager.user_connections_count[user.id] - 1)
+        if manager.user_connections_count[user.id] == 0:
+            user.is_online = False
+            user.last_seen = datetime.now(timezone.utc)
+            try:
+                db.commit()
+            except Exception:
+                pass
+            await manager.broadcast_presence(user.id, False, user.last_seen, db)
 
 @router.post("/dm/{target_user_id}", response_model=schemas.ConversationResponse)
 def get_or_create_dm(
@@ -81,7 +148,7 @@ def get_or_create_dm(
     return new_conv
 
 @router.get("/conversations", response_model=List[schemas.ConversationResponse])
-def get_my_conversations(
+async def get_my_conversations(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -90,6 +157,25 @@ def get_my_conversations(
     ).all()
     
     conv_ids = [p.conversation_id for p in participants]
+
+    undelivered = db.query(models.Message).filter(
+        models.Message.conversation_id.in_(conv_ids),
+        models.Message.sender_id != current_user.id,
+        models.Message.is_delivered == False
+    ).all()
+
+    if undelivered:
+        convs_to_notify = set()
+        for m in undelivered:
+            m.is_delivered = True
+            convs_to_notify.add(m.conversation_id)
+        db.commit()
+        
+        for cid in convs_to_notify:
+            await manager.broadcast_to_conversation(cid, {
+                "type": "messages_delivered",
+                "user_id": current_user.id
+            })
     
     conversations = db.query(models.Conversation).filter(
         models.Conversation.id.in_(conv_ids)
@@ -115,7 +201,7 @@ def get_my_conversations(
     return conversations
 
 @router.get("/unread-count")
-def get_global_unread_count(
+async def get_global_unread_count(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -123,6 +209,25 @@ def get_global_unread_count(
         models.ConversationParticipant.user_id == current_user.id
     ).all()
     conv_ids = [p.conversation_id for p in participants]
+
+    undelivered = db.query(models.Message).filter(
+        models.Message.conversation_id.in_(conv_ids),
+        models.Message.sender_id != current_user.id,
+        models.Message.is_delivered == False
+    ).all()
+    
+    if undelivered:
+        convs_to_notify = set()
+        for m in undelivered:
+            m.is_delivered = True
+            convs_to_notify.add(m.conversation_id)
+        db.commit()
+        
+        for cid in convs_to_notify:
+            await manager.broadcast_to_conversation(cid, {
+                "type": "messages_delivered",
+                "user_id": current_user.id
+            })
     
     count = db.query(models.Message).filter(
         models.Message.conversation_id.in_(conv_ids),
@@ -151,6 +256,28 @@ def get_messages(
     
     return messages
 
+@router.websocket("/ws/hub")
+async def websocket_hub(websocket: WebSocket, token: str, db: Session = Depends(get_db)):
+    try:
+        credentials_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        token_data = verify_access_token(token, credentials_exception)
+        user = db.query(models.User).filter(models.User.email == token_data.email).first()
+        if not user or user.is_blocked:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+    except Exception:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await manager.connect_hub(websocket, user.id)
+    await handle_connect(user, db)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect_hub(websocket, user.id)
+        await handle_disconnect(user, db)
 
 @router.websocket("/ws/{conversation_id}")
 async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str, db: Session = Depends(get_db)):
@@ -175,6 +302,7 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
         return
 
     await manager.connect(websocket, conversation_id)
+    await handle_connect(user, db)
 
     try:
         while True:
@@ -212,11 +340,13 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
 
                     message_data = {
                         "type": "new_message",
+                        "local_id": payload.get("local_id"),
                         "message": {
                             "id": new_message.id,
                             "conversation_id": new_message.conversation_id,
                             "content": new_message.content,
                             "created_at": new_message.created_at.isoformat(),
+                            "is_delivered": new_message.is_delivered,
                             "is_read": new_message.is_read,
                             "is_deleted": new_message.is_deleted,
                             "reply_to": reply_obj,
@@ -224,17 +354,71 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
                                 "id": user.id,
                                 "first_name": user.first_name,
                                 "last_name": user.last_name,
-                                "role": user.role.value
+                                "role": user.role.value,
+                                "is_online": user.is_online,
+                                "last_seen": user.last_seen.isoformat() if user.last_seen else None
                             }
                         }
                     }
                     await manager.broadcast_to_conversation(conversation_id, message_data)
-                    
+
+                    participants = db.query(models.ConversationParticipant).filter(
+                        models.ConversationParticipant.conversation_id == conversation_id
+                    ).all()
+                    for p in participants:
+                        if p.user_id != user.id:
+                            await manager.broadcast_to_user_hub(p.user_id, message_data)                       
                 elif action == "typing":
-                    await manager.broadcast_to_conversation(conversation_id, {
+                    typing_data = {
                         "type": "typing_status",
+                        "conversation_id": conversation_id,
                         "user_id": user.id,
                         "is_typing": payload.get("is_typing", False)
+                    }
+                    await manager.broadcast_to_conversation(conversation_id, typing_data)
+                    
+                    participants = db.query(models.ConversationParticipant).filter(
+                        models.ConversationParticipant.conversation_id == conversation_id
+                    ).all()
+                    for p in participants:
+                        if p.user_id != user.id:
+                            await manager.broadcast_to_user_hub(p.user_id, typing_data)
+
+                elif action == "edit_message":
+                    msg_id = payload.get("message_id")
+                    new_content = payload.get("content")
+                    
+                    msg_to_edit = db.query(models.Message).filter(
+                        models.Message.id == msg_id,
+                        models.Message.sender_id == user.id
+                    ).first()
+                    
+                    if msg_to_edit and not msg_to_edit.is_deleted:
+                        msg_to_edit.content = new_content
+                        msg_to_edit.is_edited = True
+                        db.commit()
+                        
+                        edit_data = {
+                            "type": "message_edited",
+                            "message": {
+                                "id": msg_to_edit.id,
+                                "content": msg_to_edit.content,
+                                "is_edited": True
+                            }
+                        }
+                        await manager.broadcast_to_conversation(conversation_id, edit_data)
+
+                elif action == "mark_delivered":
+                    db.query(models.Message).filter(
+                        models.Message.conversation_id == conversation_id,
+                        models.Message.sender_id != user.id,
+                        models.Message.is_delivered == False
+                    ).update({"is_delivered": True})
+                    db.commit()
+                    
+                    await manager.broadcast_to_conversation(conversation_id, {
+                        "type": "messages_delivered",
+                        "user_id": user.id
                     })
                     
                 elif action == "mark_read":
@@ -242,7 +426,7 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
                         models.Message.conversation_id == conversation_id,
                         models.Message.sender_id != user.id,
                         models.Message.is_read == False
-                    ).update({"is_read": True})
+                    ).update({"is_read": True, "is_delivered": True})
                     db.commit()
                     
                     await manager.broadcast_to_conversation(conversation_id, {
@@ -250,11 +434,12 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
                         "user_id": user.id
                     })
             except json.JSONDecodeError:
-                pass # Ignore malformed data
+                pass
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, conversation_id)
-        
+        await handle_disconnect(user, db)
+
 @router.delete("/messages/{message_id}")
 async def delete_message(
     message_id: str,
@@ -266,9 +451,9 @@ async def delete_message(
         raise HTTPException(status_code=404)
     if msg.sender_id != current_user.id: 
         raise HTTPException(status_code=403, detail="Not authorized to delete this message.")
-    
+
     msg.is_deleted = True
-    msg.content = "🚫 This message was deleted"
+    msg.content = "This message was deleted"
     db.commit()
     
     await manager.broadcast_to_conversation(msg.conversation_id, {

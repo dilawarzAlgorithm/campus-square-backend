@@ -1,6 +1,7 @@
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
@@ -15,10 +16,12 @@ from app.core.features.mail import send_otp_email
 from app.core.auth.oauth2 import get_current_user
 from app.schemas.vault import DepartmentResponse
 
+
 router = APIRouter(
     prefix="/api/auth",
     tags=["Authentication"]
 )
+
 
 @router.get("/departments-by-email", response_model=list[DepartmentResponse])
 def get_departments_by_email(email: str, db: Session = Depends(get_db)):
@@ -33,6 +36,7 @@ def get_departments_by_email(email: str, db: Session = Depends(get_db)):
         return []
         
     return db.query(models.Department).filter(models.Department.institution_id == institution.id).order_by(models.Department.name.asc()).all()
+
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks , db: Session = Depends(get_db)):
@@ -54,8 +58,8 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         )
 
     institution = db.query(models.Institution).filter(models.Institution.domain == domain).first()
-    if not institution:
-         raise HTTPException(
+    if not institution: 
+        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Your institution ({domain}) is not yet registered on Campus Square. Please contact your administrator."
         )
@@ -83,6 +87,7 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
 
     otp = generate_otp()
     user_id = str(uuid.uuid4())
+
     new_user = models.User(
         id=user_id,
         email=payload.email,
@@ -97,7 +102,6 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         verification_otp=otp,
         otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
     )
-
     db.add(new_user)
     db.flush()
 
@@ -116,6 +120,7 @@ def register(payload: schemas.RegisterRequest, background_task: BackgroundTasks 
         "user_id": new_user.id
     }
 
+
 @router.post("/verify-otp")
 def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(get_db)):
     payload.email = payload.email.lower()
@@ -123,13 +128,13 @@ def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(ge
     
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-    
+        
     if user.is_verified:
         return {"message": "Email is already verified."}
 
     if user.verification_otp != payload.otp:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP code.")
-    
+        
     if datetime.now(timezone.utc) > user.otp_expires_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired.")
 
@@ -158,12 +163,15 @@ def verify_otp(payload: schemas.OTPVerificationRequest, db: Session = Depends(ge
                 db.add(p)
 
     db.commit()
+
     return {"success": True, "message": "Your account has been successfully verified! You can now log in."}
+
 
 @router.post("/resend-otp")
 def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db: Session = Depends(get_db)):
     payload.email = payload.email.lower()
     user = db.query(models.User).filter(models.User.email == payload.email).first()
+
     if not user or not verify(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -179,11 +187,13 @@ def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db:
     otp = generate_otp()
     user.verification_otp = otp
     user.otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
+    
     db.commit()
     db.refresh(user)
     
     background_task.add_task(send_otp_email, user.email, otp, user.first_name)
     return {"success": True, "message": "A new verification code has been sent."}
+
 
 @router.post("/login", response_model=schemas.Token)
 def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
@@ -212,6 +222,7 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         )
 
     access_token = create_access_token(data={"sub": user.email})
+
     refresh_token_str = secrets.token_urlsafe(64)
     refresh_expires = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
@@ -226,7 +237,7 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 
     karma_info = calculate_karma_tier(user.karma)
     user_response = schemas.UserResponse.model_validate(user)
-    user_response.karma_tier = karma_info
+    user_response.karma_tier = schemas.KarmaTierInfo(**karma_info)
 
     return {
         "access_token": access_token,
@@ -234,6 +245,7 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user": user_response
     }
+
 
 def create_initial_admin(db: Session):
     admin_user = db.query(models.User).filter(models.User.email == settings.admin_id.lower()).first()
@@ -266,23 +278,27 @@ def create_initial_admin(db: Session):
         new_profile = models.Profile(id=str(uuid.uuid4()), user_id=admin_user.id)
         db.add(new_profile)
         db.commit()
+
     return admin_user
+
 
 @router.post("/login-staff")
 def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     payload.email = payload.email.lower()
+    
     if payload.email == settings.admin_id.lower():
         create_initial_admin(db)
 
     user = db.query(models.User).filter(models.User.email == payload.email).first()
 
-    if not user or not verify(payload.password, user.password_hash):
-         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
+    if not user or not verify(payload.password, user.password_hash): 
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
          
     if user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied. Not a staff member.")
 
     access_token = create_access_token(data={"sub": user.email})
+
     refresh_token_str = secrets.token_urlsafe(64)
     refresh_expires = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
@@ -297,7 +313,7 @@ def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 
     karma_info = calculate_karma_tier(user.karma)
     user_response = schemas.UserResponse.model_validate(user)
-    user_response.karma_tier = karma_info
+    user_response.karma_tier = schemas.KarmaTierInfo(**karma_info)
 
     return {
         "access_token": access_token,
@@ -317,12 +333,13 @@ def change_password(payload: schemas.ChangePasswordRequest, current_user: models
         
     current_user.password_hash = hash(payload.new_password)
     current_user.requires_password_change = False
+    
     db.commit()
     db.refresh(current_user)
 
     karma_info = calculate_karma_tier(current_user.karma)
     user_response = schemas.UserResponse.model_validate(current_user)
-    user_response.karma_tier = karma_info
+    user_response.karma_tier = schemas.KarmaTierInfo(**karma_info)
 
     return {
         "success": True, 
@@ -330,25 +347,29 @@ def change_password(payload: schemas.ChangePasswordRequest, current_user: models
         "user": user_response
     }
 
+
 @router.get("/me", response_model=schemas.UserResponse)
 def get_me(current_user: models.User = Depends(get_current_user)):
     karma_info = calculate_karma_tier(current_user.karma)
     user_response = schemas.UserResponse.model_validate(current_user)
-    user_response.karma_tier = karma_info
+    user_response.karma_tier = schemas.KarmaTierInfo(**karma_info)
     return user_response
+
 
 @router.patch("/name", response_model=schemas.UserResponse)
 def update_name(payload: schemas.UpdateNameRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     current_user.first_name = payload.first_name.strip()
     current_user.last_name = payload.last_name.strip()
-
+    
     db.commit()
     db.refresh(current_user)
     
     karma_info = calculate_karma_tier(current_user.karma)
     user_response = schemas.UserResponse.model_validate(current_user)
-    user_response.karma_tier = karma_info
+    user_response.karma_tier = schemas.KarmaTierInfo(**karma_info)
+
     return user_response
+
 
 @router.patch("/profile", response_model=schemas.UserResponse)
 def update_profile(payload: schemas.UpdateProfileRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -371,8 +392,10 @@ def update_profile(payload: schemas.UpdateProfileRequest, current_user: models.U
     
     karma_info = calculate_karma_tier(current_user.karma)
     user_response = schemas.UserResponse.model_validate(current_user)
-    user_response.karma_tier = karma_info
+    user_response.karma_tier = schemas.KarmaTierInfo(**karma_info)
+    
     return user_response
+
 
 @router.post("/refresh", response_model=schemas.TokenRefreshResponse)
 def refresh(payload: schemas.TokenRefreshRequest, db: Session = Depends(get_db)):
@@ -412,9 +435,7 @@ def refresh(payload: schemas.TokenRefreshRequest, db: Session = Depends(get_db))
         expires_at=new_refresh_expires
     )
     db.add(new_db_token)
-
     new_access_token = create_access_token(data={"sub": user.email})
-
     db.commit()
 
     return {

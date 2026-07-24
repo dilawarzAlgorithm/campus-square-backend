@@ -7,6 +7,8 @@ class ChatUser(BaseModel):
     first_name: str
     last_name: str
     role: str
+    is_online: Optional[bool] = False
+    last_seen: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -26,8 +28,10 @@ class MessageResponse(BaseModel):
     created_at: datetime
     sender: ChatUser
     reply_to: Optional[MessageReplyInfo] = None
+    is_delivered: Optional[bool] = False
     is_read: Optional[bool] = False
     is_deleted: Optional[bool] = False
+    is_edited: Optional[bool] = False
 
     class Config:
         from_attributes = True
