@@ -55,13 +55,3 @@ class ConversationParticipantResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-class ConversationResponse(BaseModel):
-    id: str
-    type: str
-    created_at: datetime
-    participants: List[ConversationParticipantResponse]
-    last_message: Optional[MessageResponse] = None
-
-    class Config:
-        from_attributes = True
