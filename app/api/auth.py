@@ -22,6 +22,11 @@ router = APIRouter(
     tags=["Authentication"]
 )
 
+@router.patch("/fcm-token")
+def update_fcm_token(payload: schemas.FCMTokenUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    current_user.fcm_token = payload.token
+    db.commit()
+    return {"success": True}
 
 @router.get("/departments-by-email", response_model=list[DepartmentResponse])
 def get_departments_by_email(email: str, db: Session = Depends(get_db)):

@@ -15,7 +15,8 @@ from app.schemas.auth import (
     ResendOtp,
     InstitutionCreateRequest,
     InstitutionResponse,
-    KarmaTierInfo
+    KarmaTierInfo,
+    FCMTokenUpdate
 )
 
 from app.schemas.vault import (
@@ -48,4 +49,9 @@ from app.schemas.chat import (
     MessageResponse,
     ConversationParticipantResponse,
     ConversationResponse
+)
+
+from app.schemas.notification import (
+    PushNotificationRequest,
+    BroadcastRequest
 )

@@ -113,3 +113,6 @@ class InstitutionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class FCMTokenUpdate(BaseModel):
+    token: Optional[str] = None

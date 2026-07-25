@@ -11,6 +11,8 @@ from app.models import models
 from app.schemas import schemas
 from app.enum.enum import UserRole
 from app.core.auth.oauth2 import get_current_user, verify_access_token
+from app.api.notification import send_token_push_notification
+import asyncio
 
 router = APIRouter(
     prefix="/api/chat",
@@ -444,7 +446,18 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
                     ).all()
                     for p in participants:
                         if p.user_id != user.id:
-                            await manager.broadcast_to_user_hub(p.user_id, message_data)                       
+                            await manager.broadcast_to_user_hub(p.user_id, message_data)
+
+                            target_user = db.query(models.User).filter(models.User.id == p.user_id).first()
+                            if target_user and target_user.fcm_token and not target_user.is_online:
+                                asyncio.create_task(asyncio.to_thread(
+                                    send_token_push_notification,
+                                    f"New message from {user.first_name}",
+                                    new_message.content,
+                                    target_user.fcm_token,
+                                    {"conversation_id": conversation_id, "type": "chat"}
+                                ))
+                                
                 elif action == "typing":
                     typing_data = {
                         "type": "typing_status",

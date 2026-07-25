@@ -37,6 +37,7 @@ class User(Base):
 
     is_online = Column(Boolean, default=False)
     last_seen = Column(TIMESTAMP(timezone=True), nullable=True)
+    fcm_token = Column(String, nullable=True)
     
     verification_otp = Column(String, nullable=True)
     otp_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)

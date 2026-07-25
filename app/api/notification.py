@@ -1,10 +1,13 @@
 import firebase_admin
 from firebase_admin import credentials, messaging
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 import os
 
 from app.core.config.config import settings
+from app.core.auth.oauth2 import get_current_user
+from app.enum.enum import UserRole
+from app.schemas import schemas
 
 router = APIRouter(
     prefix="/api/notifications",
@@ -19,14 +22,9 @@ if not firebase_admin._apps:
     except Exception as e:
         print(f"Warning: Failed to initialize Firebase Admin SDK. Push notifications will fail. {e}")
 
-class PushNotificationRequest(BaseModel):
-    title: str
-    body: str
-    topic: str
-    data_payload: dict = {}
 
 @router.post("/send")
-def send_push_notification(payload: PushNotificationRequest):
+def send_push_notification(payload: schemas.PushNotificationRequest):
     try:
         message = messaging.Message(
             notification=messaging.Notification(
@@ -47,6 +45,23 @@ def send_push_notification(payload: PushNotificationRequest):
             detail=f"Failed to send notification: {str(e)}"
         )
 
+@router.post("/broadcast")
+def send_global_broadcast(payload: schemas.BroadcastRequest, current_user = Depends(get_current_user)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only administrators can send global broadcasts.")
+    try:
+        message = messaging.Message(
+            notification=messaging.Notification(title=payload.title, body=payload.body),
+            topic="all_users"
+        )
+        messaging.send(message)
+        return {"success": True, "message": "Broadcast sent to all users."}
+    except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to send global notification: {str(e)}"
+            )
+
 def trigger_push_notification(title: str, body: str, topic: str, data_payload: dict = None):
     if not firebase_admin._apps:
         print("Firebase not initialized. Skipping push notification.")
@@ -64,3 +79,16 @@ def trigger_push_notification(title: str, body: str, topic: str, data_payload: d
         messaging.send(message)
     except Exception as e:
         print(f"Background Push Notification Error: {e}")
+
+def send_token_push_notification(title: str, body: str, token: str, data_payload: dict = None):
+    if not firebase_admin._apps or not token:
+        return
+    try:
+        message = messaging.Message(
+            notification=messaging.Notification(title=title, body=body),
+            data=data_payload or {},
+            token=token,
+        )
+        messaging.send(message)
+    except Exception as e:
+        print(f"Targeted Push Notification Error: {e}")
