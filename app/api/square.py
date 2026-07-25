@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.core.database.database import get_db
 from app.models import models
@@ -8,6 +8,7 @@ from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
 from app.enum.enum import SquareCategory, UserRole
 from app.core.features.storage import delete_file_from_supabase
+from app.api.notification import trigger_push_notification
 
 router = APIRouter(
     prefix="/api/square",
@@ -17,6 +18,7 @@ router = APIRouter(
 @router.post("/notices", response_model=schemas.NoticeResponse, status_code=status.HTTP_201_CREATED)
 def create_notice(
     payload: schemas.NoticeCreate,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -44,6 +46,20 @@ def create_notice(
     db.add(new_notice)
     db.commit()
     db.refresh(new_notice)
+
+    topic = "important_notices" if payload.urgent_until else "all_notices"
+    title_prefix = "Urgent Notice" if payload.urgent_until else payload.category.value.title()
+    
+    body_snippet = payload.body[:100] + ("..." if len(payload.body) > 100 else "")
+    
+    background_tasks.add_task(
+        trigger_push_notification,
+        title=f"{title_prefix}: {payload.title}",
+        body=body_snippet,
+        topic=topic,
+        data_payload={"notice_id": new_notice.id, "type": "square"}
+    )
+
     return new_notice
 
 @router.get("/notices", response_model=List[schemas.NoticeResponse])

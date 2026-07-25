@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     admin_password: str
     supabase_url: str
     supabase_key: str
+    firebase_admin_credentials: str
+
 
     class Config:
         env_file = ".env"

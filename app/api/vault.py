@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.core.database.database import get_db
@@ -9,6 +9,7 @@ from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
 from app.enum.enum import ResourceType, VoteType, UserRole
 from app.core.features.storage import upload_file_to_supabase, delete_file_from_supabase
+from app.api.notification import trigger_push_notification
 
 router = APIRouter(
     prefix="/api/vault",
@@ -105,6 +106,7 @@ async def upload_resource_file(
 @router.post("/resources", response_model=schemas.ResourceResponse, status_code=status.HTTP_201_CREATED)
 def upload_resource(
     payload: schemas.ResourceCreate,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -135,6 +137,15 @@ def upload_resource(
     
     db.commit()
     db.refresh(new_resource)
+
+    background_tasks.add_task(
+        trigger_push_notification,
+        title="New Study Material Added!",
+        body=f"{current_user.first_name} uploaded '{new_resource.title}' to the Vault.",
+        topic="resources",
+        data_payload={"resource_id": new_resource.id, "type": "vault"}
+    )
+
     return new_resource
 
 

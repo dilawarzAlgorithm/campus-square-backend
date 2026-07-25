@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, vault, utils, community, square, chat, admin
+from app.api import auth, vault, utils, community, square, chat, admin, notification
 
 app = FastAPI(
     title="Campus Square - Auth Engine",
@@ -26,6 +26,7 @@ app.include_router(community.router)
 app.include_router(square.router)
 app.include_router(chat.router)
 app.include_router(admin.router)
+app.include_router(notification.router)
 
 @app.get("/")
 def root():
