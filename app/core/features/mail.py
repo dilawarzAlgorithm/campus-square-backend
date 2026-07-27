@@ -115,7 +115,7 @@ def _send_otp_blocking(email_to: str, otp: str, user_name: str):
             server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
 
         try:
-            if settings.smtp_port == 587:
+            if settings.smtp_port in [587, 2525]:
                 logger.info("Starting TLS connection...")
                 server.starttls()
                 
