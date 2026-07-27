@@ -110,9 +110,9 @@ def _send_otp_blocking(email_to: str, otp: str, user_name: str):
         message.attach(part_html)
 
         if settings.smtp_port == 465:
-            server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port)
+            server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15)
         else:
-            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port)
+            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
 
         try:
             if settings.smtp_port == 587:
