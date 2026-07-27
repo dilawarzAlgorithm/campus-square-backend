@@ -114,15 +114,19 @@ def _send_otp_blocking(email_to: str, otp: str, user_name: str):
                 
             server.login(settings.smtp_username, settings.smtp_password)
             server.send_message(message)
+            print(f"SUCCESS: OTP email sent to {email_to}")
         finally:
             server.quit()
 
     except Exception as error:
+        print(f"CRITICAL EMAIL ERROR: Failed to send email to {email_to}")
+        print(f"Error Details: {str(error)}")
         return
 
 
 async def send_otp_email(email_to: str, otp: str, user_name: str):
     if not settings.smtp_username or not settings.smtp_password:
+        print("WARNING: SMTP credentials are not set in environment variables.")
         return
 
     await asyncio.to_thread(_send_otp_blocking, email_to, otp, user_name)
