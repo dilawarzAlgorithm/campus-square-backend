@@ -13,7 +13,6 @@ from app.core.features.utils import hash
 from app.enum.enum import UserRole
 
 SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{settings.database_username}:{settings.database_password}@{settings.database_hostname}:{settings.database_port}/{settings.database_name}_test"
-
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -42,7 +41,8 @@ def client(db):
         try:
             yield db
         finally:
-            pass 
+            pass
+    
     app.dependency_overrides[get_db] = override_get_db
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -53,7 +53,8 @@ def test_institution(db):
         id=str(uuid.uuid4()),
         name="College Of Mine",
         short_name="COM",
-        domain="college.com"
+        domain="college.com",
+        default_storage_limit=52428800
     )
     db.add(inst)
     db.commit()
@@ -69,6 +70,16 @@ def test_department(db, test_institution):
         institution_id=test_institution.id
     )
     db.add(dept)
+    
+    db.flush()
+    
+    conv = models.Conversation(
+        id=str(uuid.uuid4()),
+        type="DEPARTMENT",
+        name="CSE Hub",
+        department_id=dept.id
+    )
+    db.add(conv)
     db.commit()
     db.refresh(dept)
     return dept
@@ -90,7 +101,6 @@ def test_unverified_user(db, test_institution, test_department):
     )
     db.add(unverified_user)
     db.flush()
-
     profile = models.Profile(id=str(uuid.uuid4()), user_id=unverified_user.id)
     db.add(profile)
     db.commit()
@@ -112,7 +122,6 @@ def test_verified_user(db, test_institution, test_department):
     )
     db.add(verified_user)
     db.flush()
-
     profile = models.Profile(id=str(uuid.uuid4()), user_id=verified_user.id)
     db.add(profile)
     db.commit()
@@ -120,7 +129,7 @@ def test_verified_user(db, test_institution, test_department):
     return verified_user
 
 @pytest.fixture(scope="function")
-def test_staff_user(db, test_institution):
+def test_staff_user(db, test_institution, test_department):
     staff = models.User(
         id=str(uuid.uuid4()),
         email="staff@college.com",
@@ -128,17 +137,54 @@ def test_staff_user(db, test_institution):
         first_name="Community",
         last_name="Head",
         institution_id=test_institution.id,
+        department_id=test_department.id,
         is_verified=True,
         role=UserRole.COMMUNITY_HEAD
     )
     db.add(staff)
     db.flush()
-
     profile = models.Profile(id=str(uuid.uuid4()), user_id=staff.id)
     db.add(profile)
     db.commit()
     db.refresh(staff)
     return staff
+
+@pytest.fixture(scope="function")
+def test_admin_user(db, test_institution):
+    admin = models.User(
+        id=str(uuid.uuid4()),
+        email="globaladmin@college.com",
+        password_hash=hash("password123"),
+        first_name="Global",
+        last_name="Admin",
+        institution_id=test_institution.id,
+        is_verified=True,
+        role=UserRole.ADMIN
+    )
+    db.add(admin)
+    db.flush()
+    profile = models.Profile(id=str(uuid.uuid4()), user_id=admin.id)
+    db.add(profile)
+    db.commit()
+    db.refresh(admin)
+    return admin
+
+@pytest.fixture(scope="function")
+def test_other_user(db, test_institution, test_department):
+    other_user = models.User(
+        id=str(uuid.uuid4()),
+        email="student2@college.com",
+        password_hash=hash("password123"),
+        first_name="Second",
+        last_name="Student",
+        institution_id=test_institution.id,
+        department_id=test_department.id,
+        is_verified=True,
+        role=UserRole.STUDENT
+    )
+    db.add(other_user)
+    db.commit()
+    return other_user
 
 @pytest.fixture(scope="function")
 def auth_headers(client, test_verified_user):
@@ -157,23 +203,17 @@ def auth_headers_staff(client, test_staff_user):
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 @pytest.fixture(scope="function")
-def auth_headers_other_user(client, db, test_institution, test_department):
-    other_user = models.User(
-        id=str(uuid.uuid4()),
-        email="student2@college.com",
-        password_hash=hash("password123"),
-        first_name="Second",
-        last_name="Student",
-        institution_id=test_institution.id,
-        department_id=test_department.id,
-        is_verified=True,
-        role=UserRole.STUDENT
+def auth_headers_admin(client, test_admin_user):
+    response = client.post(
+        "/api/auth/login-staff", 
+        json={"email": test_admin_user.email, "password": "password123"}
     )
-    db.add(other_user)
-    db.commit()
-    
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+@pytest.fixture(scope="function")
+def auth_headers_other_user(client, test_other_user):
     response = client.post(
         "/api/auth/login", 
-        json={"email": "student2@college.com", "password": "password123"}
+        json={"email": test_other_user.email, "password": "password123"}
     )
     return {"Authorization": f"Bearer {response.json()['access_token']}"}

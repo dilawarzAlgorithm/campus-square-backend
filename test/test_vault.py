@@ -30,7 +30,6 @@ def test_resources(client, auth_headers, test_department):
     return [r1, r2]
 
 def test_student_cannot_create_department(client, auth_headers):
-    """Ensure standard students cannot create new departments."""
     response = client.post(
         "/api/vault/departments",
         json={"name": "Hacking", "code": "HCK"},
@@ -98,12 +97,22 @@ def test_create_resource_invalid_department(client, auth_headers):
     )
     assert response.status_code == 404
 
+def test_update_resource(client, auth_headers, test_resources):
+    res_id = test_resources[0]["id"]
+    response = client.patch(
+        f"/api/vault/resources/{res_id}",
+        json={"title": "Updated Semester 1 Notes"},
+        headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert response.json()["title"] == "Updated Semester 1 Notes"
+
 def test_get_resources_with_filters(client, auth_headers, test_resources):
     response_sem = client.get(f"/api/vault/resources?semester=3", headers=auth_headers)
     assert response_sem.status_code == 200
     assert len(response_sem.json()) == 1
     assert response_sem.json()[0]["title"] == "Semester 3 PYQs"
-
+    
     response_type = client.get(f"/api/vault/resources?resource_type=NOTE", headers=auth_headers)
     assert response_type.status_code == 200
     assert len(response_type.json()) == 1
@@ -114,11 +123,26 @@ def test_voting_mechanics(client, auth_headers, test_resources):
     resp_up = client.post(f"/api/vault/resources/{res_id}/vote", json={"vote_type": "UPVOTE"}, headers=auth_headers)
     assert resp_up.status_code == 200
     assert resp_up.json()["upvote_count"] == 1
+    assert resp_up.json()["my_vote"] == "UPVOTE"
     
     resp_down = client.post(f"/api/vault/resources/{res_id}/vote", json={"vote_type": "DOWNVOTE"}, headers=auth_headers)
     assert resp_down.status_code == 200
     assert resp_down.json()["upvote_count"] == 0
     assert resp_down.json()["downvote_count"] == 1
+
+def test_save_and_unsave_resource(client, auth_headers, test_resources):
+    res_id = test_resources[0]["id"]
+    response = client.post(f"/api/vault/resources/{res_id}/save", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["is_saved"] is True
+    
+    get_saved = client.get("/api/vault/saved-resources", headers=auth_headers)
+    assert get_saved.status_code == 200
+    assert len(get_saved.json()) == 1
+    assert get_saved.json()[0]["id"] == res_id
+    
+    response_unsave = client.post(f"/api/vault/resources/{res_id}/save", headers=auth_headers)
+    assert response_unsave.json()["is_saved"] is False
 
 def test_delete_own_resource(client, auth_headers, test_resources):
     res_id = test_resources[0]["id"]

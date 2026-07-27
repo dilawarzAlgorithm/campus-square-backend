@@ -34,7 +34,6 @@ def test_registration_validation_failures(client, registration_data, expected_st
     assert detail_snippet.lower() in error_msg.lower()
 
 def test_registration_fails_without_department(client, test_institution):
-    """Students MUST provide a department ID to register."""
     response = client.post(
         "/api/auth/register",
         json={
@@ -48,7 +47,6 @@ def test_registration_fails_without_department(client, test_institution):
     assert "department selection is required" in response.json()["detail"].lower()
 
 def test_registration_fails_unrecognized_domain(client):
-    """Since the top-down model is implemented, unregistered domains trigger a 400."""
     response = client.post(
         "/api/auth/register",
         json={
@@ -77,7 +75,6 @@ def test_successful_student_registration(client, db, test_institution, test_depa
     data = response.json()
     assert data["success"] is True
     assert "user_id" in data
-
     user = db.query(models.User).filter(models.User.email == "student99@college.com").first()
     assert user is not None
     assert user.is_verified is False
@@ -100,15 +97,19 @@ def test_otp_verification_failures(client, test_unverified_user, email, otp, exp
 def test_successful_otp_verification_and_login_pipeline(client, test_unverified_user):
     email = test_unverified_user.email
     otp_code = test_unverified_user.verification_otp
-
     verify_response = client.post("/api/auth/verify-otp", json={"email": email, "otp": otp_code})
     assert verify_response.status_code == 200
     assert verify_response.json()["success"] is True
-
+    
     login_response = client.post("/api/auth/login", json={"email": email, "password": "password123"})
     assert login_response.status_code == 200
     tokens = login_response.json()
     assert "access_token" in tokens
+
+def test_resend_otp(client, test_unverified_user):
+    response = client.post("/api/auth/resend-otp", json={"email": test_unverified_user.email, "password": "password123"})
+    assert response.status_code == 200
+    assert response.json()["success"] is True
 
 @pytest.mark.parametrize(
     "email, password, expected_status, expected_detail",
@@ -127,10 +128,40 @@ def test_refresh_token_rotation(client, test_verified_user, db):
     login_response = client.post("/api/auth/login", json={"email": test_verified_user.email, "password": "password123"})
     assert login_response.status_code == 200
     first_refresh_token = login_response.json()["refresh_token"]
-
+    
     refresh_response = client.post("/api/auth/refresh", json={"refresh_token": first_refresh_token})
     assert refresh_response.status_code == 200
     assert refresh_response.json()["refresh_token"] != first_refresh_token
-
+    
     reuse_response = client.post("/api/auth/refresh", json={"refresh_token": first_refresh_token})
     assert reuse_response.status_code == 401
+
+def test_get_departments_by_email(client, test_institution, test_department):
+    response = client.get(f"/api/auth/departments-by-email?email=somebody@{test_institution.domain}")
+    assert response.status_code == 200
+    assert len(response.json()) > 0
+    assert response.json()[0]["id"] == test_department.id
+
+def test_change_password(client, auth_headers, test_verified_user):
+    response = client.post("/api/auth/change-password", json={
+        "old_password": "password123",
+        "new_password": "newpassword123"
+    }, headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
+def test_get_me(client, auth_headers):
+    response = client.get("/api/auth/me", headers=auth_headers)
+    assert response.status_code == 200
+    assert "email" in response.json()
+    assert "karma_tier" in response.json()
+
+def test_update_name(client, auth_headers):
+    response = client.patch("/api/auth/name", json={"first_name": "Updated", "last_name": "Name"}, headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["first_name"] == "Updated"
+
+def test_update_profile(client, auth_headers):
+    response = client.patch("/api/auth/profile", json={"dietary_preference": "Veg", "sleep_schedule": "Night Owl", "study_habits": "Group Study"}, headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["profile"]["dietary_preference"] == "Veg"
