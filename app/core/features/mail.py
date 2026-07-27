@@ -1,12 +1,18 @@
 import asyncio
 import smtplib
+import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 from app.core.config.config import settings
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 def _send_otp_blocking(email_to: str, otp: str, user_name: str):
     try:
+        logger.info(f"Attempting to send OTP email to {email_to} via {settings.smtp_host}:{settings.smtp_port}")
+        
         message = MIMEMultipart("alternative")
         message["Subject"] = f"{otp} is your Campus Square verification code"
         message["From"] = f"Campus Square <{settings.smtp_from_email}>"
@@ -110,23 +116,28 @@ def _send_otp_blocking(email_to: str, otp: str, user_name: str):
 
         try:
             if settings.smtp_port == 587:
+                logger.info("Starting TLS connection...")
                 server.starttls()
                 
+            logger.info("Logging into SMTP server...")
             server.login(settings.smtp_username, settings.smtp_password)
+            
+            logger.info("Sending message...")
             server.send_message(message)
-            print(f"SUCCESS: OTP email sent to {email_to}")
+            
+            logger.info(f"SUCCESS: OTP email successfully handed off to {email_to}")
         finally:
             server.quit()
 
     except Exception as error:
-        print(f"CRITICAL EMAIL ERROR: Failed to send email to {email_to}")
-        print(f"Error Details: {str(error)}")
+        logger.error(f"CRITICAL EMAIL ERROR: Failed to send email to {email_to}")
+        logger.error(f"Error Details: {str(error)}")
         return
 
 
 async def send_otp_email(email_to: str, otp: str, user_name: str):
     if not settings.smtp_username or not settings.smtp_password:
-        print("WARNING: SMTP credentials are not set in environment variables.")
+        logger.warning("WARNING: SMTP credentials are not set in environment variables.")
         return
 
     await asyncio.to_thread(_send_otp_blocking, email_to, otp, user_name)
