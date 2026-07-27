@@ -60,7 +60,8 @@ def add_institution_and_head(
         id=str(uuid.uuid4()),
         name=payload.name,
         short_name=payload.short_name,
-        domain=payload.domain
+        domain=payload.domain,
+        default_storage_limit=payload.default_storage_limit_mb * 1024 * 1024 if payload.default_storage_limit_mb else 52428800
     )
     db.add(new_inst)
     db.flush()
@@ -86,6 +87,22 @@ def add_institution_and_head(
     
     return new_inst
 
+@router.patch("/institutions/{institution_id}/storage-limit", response_model=schemas.InstitutionResponse)
+def update_inst_storage_limit(
+    institution_id: str,
+    payload: schemas.InstitutionStorageLimitRequest,
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    inst = db.query(models.Institution).filter(models.Institution.id == institution_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Institution not found.")
+    
+    inst.default_storage_limit = payload.default_storage_limit_mb * 1024 * 1024
+    db.commit()
+    db.refresh(inst)
+    return inst
+
 @router.get("/users", response_model=List[schemas.UserResponse])
 def get_all_users(current_user: models.User = Depends(require_admin), db: Session = Depends(get_db)):
     return db.query(models.User).order_by(models.User.created_at.desc()).all()
@@ -107,4 +124,5 @@ def toggle_user_block(
     user.is_blocked = payload.is_blocked
     db.commit()
     db.refresh(user)
+
     return user

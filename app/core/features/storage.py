@@ -43,3 +43,32 @@ def delete_file_from_supabase(file_url: str):
             supabase.storage.from_(bucket_name).remove([file_path])
     except Exception as e:
         print(f"Storage deletion warning: {str(e)}")
+
+def handle_file_deletion(file_url: str, db):
+    if not file_url:
+        return
+    try:
+        from app.models import models
+        asset = db.query(models.FileAsset).filter(models.FileAsset.file_url == file_url).first()
+        if not asset:
+            delete_file_from_supabase(file_url)
+            return
+
+        res_count = db.query(models.AcademicResource).filter(models.AcademicResource.file_url == file_url).count()
+        notice_count_file = db.query(models.Notice).filter(models.Notice.file_url == file_url).count()
+        notice_count_img = db.query(models.Notice).filter(models.Notice.image_url == file_url).count()
+        chat_msg_count = db.query(models.Message).filter(models.Message.content.like(f"%{file_url}%")).count()
+
+        if (res_count + notice_count_file + notice_count_img + chat_msg_count) == 0:
+            delete_file_from_supabase(file_url)
+            
+            if asset.uploader_id:
+                uploader = db.query(models.User).filter(models.User.id == asset.uploader_id).first()
+                if uploader:
+                    uploader.storage_used = max(0, uploader.storage_used - asset.file_size)
+            
+            db.delete(asset)
+            db.commit()
+
+    except Exception as e:
+        print(f"Error handling file deletion: {e}")

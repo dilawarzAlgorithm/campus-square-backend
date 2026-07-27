@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 from app.enum.enum import UserRole
 
@@ -12,3 +13,6 @@ class RollNumberUpdateRequest(BaseModel):
 
 class AutoRollNumberRequest(BaseModel):
     extract_roll_from_email: bool
+
+class StorageLimitUpdateRequest(BaseModel):
+    storage_limit_mb: Optional[int] = None

@@ -1,5 +1,6 @@
 import uuid
 import json
+import re
 from typing import List, Dict, Any
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
@@ -12,12 +13,14 @@ from app.schemas import schemas
 from app.enum.enum import UserRole
 from app.core.auth.oauth2 import get_current_user, verify_access_token
 from app.api.notification import send_token_push_notification
+from app.core.features.storage import handle_file_deletion
 import asyncio
 
 router = APIRouter(
     prefix="/api/chat",
     tags=["Chat & Messaging"]
 )
+
 
 class ConnectionManager:
     def __init__(self):
@@ -91,6 +94,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+
 async def handle_connect(user: models.User, db: Session):
     manager.user_connections_count[user.id] = manager.user_connections_count.get(user.id, 0) + 1
     if manager.user_connections_count[user.id] == 1:
@@ -109,6 +113,7 @@ async def handle_disconnect(user: models.User, db: Session):
             except Exception:
                 pass
             await manager.broadcast_presence(user.id, False, user.last_seen, db)
+
 
 @router.post("/dm/{target_user_id}", response_model=schemas.ConversationResponse)
 def get_or_create_dm(
@@ -148,7 +153,9 @@ def get_or_create_dm(
     db.add(p2)
     db.commit()
     db.refresh(new_conv)
+
     return new_conv
+
 
 @router.get("/conversations", response_model=List[schemas.ConversationResponse])
 async def get_my_conversations(
@@ -179,6 +186,7 @@ async def get_my_conversations(
                 "type": "messages_delivered",
                 "user_id": current_user.id
             })
+
     
     conversations = db.query(models.Conversation).filter(
         models.Conversation.id.in_(conv_ids)
@@ -224,6 +232,7 @@ async def block_participant(conversation_id: str, user_id: str, payload: dict, c
         "is_blocked": participant.is_blocked
     })
     return {"success": True, "is_blocked": participant.is_blocked}
+
 
 @router.post("/conversations/{conversation_id}/messages")
 async def forward_message(conversation_id: str, payload: dict, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -300,7 +309,7 @@ async def get_global_unread_count(
                 "type": "messages_delivered",
                 "user_id": current_user.id
             })
-    
+
     count = db.query(models.Message).filter(
         models.Message.conversation_id.in_(conv_ids),
         models.Message.sender_id != current_user.id,
@@ -328,6 +337,7 @@ def get_messages(
     
     return messages
 
+
 @router.websocket("/ws/hub")
 async def websocket_hub(websocket: WebSocket, token: str, db: Session = Depends(get_db)):
     try:
@@ -350,6 +360,7 @@ async def websocket_hub(websocket: WebSocket, token: str, db: Session = Depends(
     except WebSocketDisconnect:
         manager.disconnect_hub(websocket, user.id)
         await handle_disconnect(user, db)
+
 
 @router.websocket("/ws/{conversation_id}")
 async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str, db: Session = Depends(get_db)):
@@ -441,21 +452,31 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
                     }
                     await manager.broadcast_to_conversation(conversation_id, message_data)
 
+                    display_content = new_message.content
+                    match = re.search(r'^\[ATTACHMENT\|([^\|]+)\|([^\|]+)\|([^\]]+)\]\n?(.*)', display_content, re.DOTALL)
+                    if match:
+                        ext = match.group(1).lower()
+                        text_part = match.group(4).strip()
+                        is_image = ext in ['jpg', 'jpeg', 'png', 'gif', 'webp']
+                        prefix = "📷 Photo" if is_image else "📄 Document"
+                        display_content = f"{prefix} {text_part}".strip()
+
                     participants = db.query(models.ConversationParticipant).filter(
                         models.ConversationParticipant.conversation_id == conversation_id
                     ).all()
+                    
                     for p in participants:
                         if p.user_id != user.id:
                             await manager.broadcast_to_user_hub(p.user_id, message_data)
-
                             target_user = db.query(models.User).filter(models.User.id == p.user_id).first()
+                            
                             if target_user and target_user.fcm_token and not target_user.is_online:
                                 asyncio.create_task(asyncio.to_thread(
                                     send_token_push_notification,
                                     f"New message from {user.first_name}",
-                                    new_message.content,
+                                    display_content,
                                     target_user.fcm_token,
-                                    {"conversation_id": conversation_id, "type": "chat"}
+                                    {"conversation_id": conversation_id, "type": "chat", "sender_id": user.id}
                                 ))
                                 
                 elif action == "typing":
@@ -523,9 +544,9 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
                         "type": "messages_read",
                         "user_id": user.id
                     })
+
             except json.JSONDecodeError:
                 pass
-
     except WebSocketDisconnect:
         manager.disconnect(websocket, conversation_id)
         await handle_disconnect(user, db)
@@ -539,12 +560,19 @@ async def delete_message(
     msg = db.query(models.Message).filter(models.Message.id == message_id).first()
     if not msg: 
         raise HTTPException(status_code=404)
+
     if msg.sender_id != current_user.id: 
         raise HTTPException(status_code=403, detail="Not authorized to delete this message.")
 
     msg.is_deleted = True
+    old_content = msg.content
     msg.content = "This message was deleted"
     db.commit()
+    
+    match = re.search(r'\[ATTACHMENT\|[^\|]+\|[^\|]+\|([^\]]+)\]', old_content)
+    if match:
+        file_url = match.group(3)
+        handle_file_deletion(file_url, db)
     
     await manager.broadcast_to_conversation(msg.conversation_id, {
         "type": "message_deleted",

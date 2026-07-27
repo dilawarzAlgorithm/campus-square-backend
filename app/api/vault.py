@@ -1,4 +1,5 @@
 import uuid
+import hashlib
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -8,7 +9,7 @@ from app.models import models
 from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
 from app.enum.enum import ResourceType, VoteType, UserRole
-from app.core.features.storage import upload_file_to_supabase, delete_file_from_supabase
+from app.core.features.storage import upload_file_to_supabase, handle_file_deletion
 from app.api.notification import trigger_push_notification
 
 router = APIRouter(
@@ -29,7 +30,6 @@ def create_department(
         )
     
     dept_code = payload.code.strip().upper()
-
     existing_dept = db.query(models.Department).filter(
         models.Department.code == dept_code,
         models.Department.institution_id == current_user.institution_id
@@ -76,7 +76,6 @@ def create_department(
     db.refresh(new_dept)
     return new_dept
 
-
 @router.get("/departments", response_model=List[schemas.DepartmentResponse])
 def get_departments(
     current_user: models.User = Depends(get_current_user),
@@ -86,22 +85,46 @@ def get_departments(
         models.Department.institution_id == current_user.institution_id
     ).order_by(models.Department.code.asc()).all()
 
-
 @router.post("/upload-file", status_code=status.HTTP_200_OK)
 async def upload_resource_file(
     file: UploadFile = File(...),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     file_bytes = await file.read()
-    
+    file_size = len(file_bytes)
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+
+    existing_asset = db.query(models.FileAsset).filter(models.FileAsset.file_hash == file_hash).first()
+    if existing_asset:
+        return {"success": True, "file_url": existing_asset.file_url, "deduplicated": True}
+
+    if current_user.storage_used + file_size > current_user.effective_storage_limit:
+        limit_mb = current_user.effective_storage_limit // (1024 * 1024)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Storage quota exceeded (Limit: {limit_mb}MB). Please delete old files or request a limit increase."
+        )
+
     file_url = upload_file_to_supabase(
         file_bytes=file_bytes,
         original_filename=file.filename,
         content_type=file.content_type
     )
     
-    return {"success": True, "file_url": file_url}
+    new_asset = models.FileAsset(
+        id=str(uuid.uuid4()),
+        file_hash=file_hash,
+        file_url=file_url,
+        file_size=file_size,
+        uploader_id=current_user.id
+    )
+    db.add(new_asset)
+    
+    current_user.storage_used += file_size
+    db.commit()
 
+    return {"success": True, "file_url": file_url, "deduplicated": False}
 
 @router.post("/resources", response_model=schemas.ResourceResponse, status_code=status.HTTP_201_CREATED)
 def upload_resource(
@@ -143,11 +166,10 @@ def upload_resource(
         title="New Study Material Added!",
         body=f"{current_user.first_name} uploaded '{new_resource.title}' to the Vault.",
         topic="resources",
-        data_payload={"resource_id": new_resource.id, "type": "vault"}
+        data_payload={"resource_id": new_resource.id, "type": "vault", "sender_id": current_user.id}
     )
 
     return new_resource
-
 
 @router.patch("/resources/{resource_id}", response_model=schemas.ResourceResponse)
 def update_resource(
@@ -194,7 +216,6 @@ def update_resource(
     db.refresh(resource)
     return resource
 
-
 @router.get("/resources", response_model=List[schemas.ResourceResponse])
 def get_resources(
     department_id: Optional[str] = None,
@@ -229,6 +250,7 @@ def get_resources(
     ).all()
     
     vote_map = {v.resource_id: v.vote_type for v in user_votes}
+
     for r in resources:
         setattr(r, 'my_vote', vote_map.get(r.id))
         
@@ -258,11 +280,10 @@ def delete_resource(
         )
         
     file_url = resource.file_url
-
     db.delete(resource)
     db.commit()
 
-    delete_file_from_supabase(file_url)
+    handle_file_deletion(file_url, db)
     
     return {"success": True, "message": "Resource successfully deleted."}
 
@@ -293,18 +314,14 @@ def vote_resource(
 
     if existing_vote:
         if existing_vote.vote_type == payload.vote_type:
-            # Do nothing if again clicked on same vote type.
-            # pass
-            # To toggle, un-comment this ->
             if payload.vote_type == VoteType.UPVOTE:
                 resource.upvote_count = max(0, resource.upvote_count - 1)
                 if uploader:
                     uploader.karma = max(0, uploader.karma - 5)
             else:
                 resource.downvote_count = max(0, resource.downvote_count - 1)
-            
+                
             db.delete(existing_vote)
-
         else:
             if payload.vote_type == VoteType.UPVOTE:
                 resource.upvote_count += 1
@@ -318,7 +335,6 @@ def vote_resource(
                     uploader.karma = max(0, uploader.karma - 5)
 
             existing_vote.vote_type = payload.vote_type
-
     else:
         new_vote = models.ResourceVote(
             id=str(uuid.uuid4()),
@@ -399,6 +415,7 @@ def get_saved_resources(
     ).all()
     
     vote_map = {v.resource_id: v.vote_type for v in user_votes}
+
     for r in resources:
         setattr(r, 'my_vote', vote_map.get(r.id))
 

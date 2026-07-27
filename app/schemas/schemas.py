@@ -16,7 +16,8 @@ from app.schemas.auth import (
     InstitutionCreateRequest,
     InstitutionResponse,
     KarmaTierInfo,
-    FCMTokenUpdate
+    FCMTokenUpdate,
+    InstitutionStorageLimitRequest
 )
 
 from app.schemas.vault import (
@@ -32,7 +33,8 @@ from app.schemas.community import (
     MemberUpdateRoleRequest,
     MemberBlockRequest,
     RollNumberUpdateRequest,
-    AutoRollNumberRequest
+    AutoRollNumberRequest,
+    StorageLimitUpdateRequest
 )
 
 from app.schemas.square import (

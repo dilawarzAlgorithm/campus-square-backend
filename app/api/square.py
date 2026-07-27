@@ -2,12 +2,13 @@ import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
+
 from app.core.database.database import get_db
 from app.models import models
 from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
 from app.enum.enum import SquareCategory, UserRole
-from app.core.features.storage import delete_file_from_supabase
+from app.core.features.storage import handle_file_deletion
 from app.api.notification import trigger_push_notification
 
 router = APIRouter(
@@ -42,7 +43,6 @@ def create_notice(
         institution_id=current_user.institution_id,
         author_id=current_user.id
     )
-
     db.add(new_notice)
     db.commit()
     db.refresh(new_notice)
@@ -57,7 +57,7 @@ def create_notice(
         title=f"{title_prefix}: {payload.title}",
         body=body_snippet,
         topic=topic,
-        data_payload={"notice_id": new_notice.id, "type": "square"}
+        data_payload={"notice_id": new_notice.id, "type": "square", "sender_id": current_user.id}
     )
 
     return new_notice
@@ -76,6 +76,7 @@ def get_notices(
         query = query.filter(models.Notice.category == category)
 
     return query.order_by(models.Notice.created_at.desc()).all()
+
 
 @router.delete("/notices/{notice_id}", status_code=status.HTTP_200_OK)
 def delete_notice(
@@ -102,12 +103,11 @@ def delete_notice(
         
     image_url = notice.image_url
     file_url = notice.file_url
-
     db.delete(notice)
     db.commit()
 
-    delete_file_from_supabase(image_url)
-    delete_file_from_supabase(file_url)
+    if image_url: handle_file_deletion(image_url, db)
+    if file_url: handle_file_deletion(file_url, db)
     
     return {"success": True, "message": "Post deleted successfully."}
 
@@ -125,7 +125,7 @@ def add_comment(
 
     if not notice:
         raise HTTPException(status_code=404, detail="Notice not found.")
-    
+
     if payload.parent_id:
         parent_comment = db.query(models.NoticeComment).filter(models.NoticeComment.id == payload.parent_id).first()
         if not parent_comment:
@@ -142,7 +142,9 @@ def add_comment(
     db.add(new_comment)
     db.commit()
     db.refresh(new_comment)
+
     return new_comment
+
 
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_200_OK)
 def delete_comment(
@@ -162,4 +164,5 @@ def delete_comment(
 
     db.delete(comment)
     db.commit()
+
     return {"success": True, "message": "Comment deleted."}

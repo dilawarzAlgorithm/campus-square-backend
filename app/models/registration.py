@@ -7,12 +7,13 @@ from app.enum.enum import UserRole
 
 class Institution(Base):
     __tablename__ = "institutions"
-
+    
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     short_name = Column(String, nullable=False)
     domain = Column(String, unique=True, index=True, nullable=False)
     extract_roll_from_email = Column(Boolean, default=False, nullable=False)
+    default_storage_limit = Column(Integer, default=52428800, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -30,19 +31,21 @@ class User(Base):
     last_name = Column(String, nullable=False)
     roll_number = Column(String, nullable=True)
     role = Column(SQLEnum(UserRole), default=UserRole.STUDENT, nullable=False)
-
     is_verified = Column(Boolean, default=False)
-    is_blocked = Column(Boolean, default=False) 
-    requires_password_change = Column(Boolean, default=False)
+    is_blocked = Column(Boolean, default=False)
 
+    requires_password_change = Column(Boolean, default=False)
     is_online = Column(Boolean, default=False)
     last_seen = Column(TIMESTAMP(timezone=True), nullable=True)
     fcm_token = Column(String, nullable=True)
     
     verification_otp = Column(String, nullable=True)
     otp_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
-
     karma = Column(Integer, default=0)
+    
+    storage_used = Column(Integer, default=0, nullable=False)
+    storage_limit = Column(Integer, nullable=True)
+
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     
@@ -65,6 +68,13 @@ class User(Base):
     def department_name(self):
         return self.department.name if self.department else None
 
+    @property
+    def effective_storage_limit(self):
+        if self.storage_limit is not None:
+            return self.storage_limit
+        if self.institution:
+            return self.institution.default_storage_limit
+        return 52428800
 
 class Profile(Base):
     __tablename__ = "profiles"
@@ -81,7 +91,7 @@ class Profile(Base):
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
-
+    
     id = Column(String, primary_key=True, index=True)
     token = Column(String, unique=True, index=True, nullable=False)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

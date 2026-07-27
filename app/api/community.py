@@ -98,6 +98,31 @@ def update_roll_number(
     db.refresh(target_user)
     return target_user
 
+@router.patch("/members/{user_id}/storage-limit", response_model=schemas.UserResponse)
+def update_storage_limit(
+    user_id: str,
+    payload: schemas.StorageLimitUpdateRequest,
+    current_user: models.User = Depends(require_community_head),
+    db: Session = Depends(get_db)
+):
+    target_user = db.query(models.User).filter(
+        models.User.id == user_id,
+        models.User.institution_id == current_user.institution_id
+    ).first()
+
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found in your community.")
+
+    if payload.storage_limit_mb is not None:
+        target_user.storage_limit = payload.storage_limit_mb * 1024 * 1024
+    else:
+        target_user.storage_limit = None
+
+    db.commit()
+    db.refresh(target_user)
+    return target_user
+
+
 @router.post("/settings/auto-roll-numbers", status_code=status.HTTP_200_OK)
 def trigger_auto_roll_numbers(
     payload: schemas.AutoRollNumberRequest,
@@ -122,7 +147,7 @@ def trigger_auto_roll_numbers(
             student.roll_number = student.email.split('@')[0].upper()
             updated_count += 1
             
-    db.commit()
+        db.commit()
     
     return {
         "success": True, 

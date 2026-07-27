@@ -28,6 +28,9 @@ class UserResponse(BaseModel):
     is_blocked: bool
     requires_password_change: bool = False
     karma: int
+    storage_used: int = 0
+    storage_limit: Optional[int] = None
+    effective_storage_limit: int = 0
     institution_id: Optional[str] = None
     institution_name: Optional[str] = None
     department_id: Optional[str] = None
@@ -100,6 +103,7 @@ class InstitutionCreateRequest(BaseModel):
     head_first_name: str = Field(..., description="First name of the Community Head")
     head_last_name: str = Field(..., description="Last name of the Community Head")
     head_password: str = Field(..., min_length=8, description="Initial password for the Community Head")
+    default_storage_limit_mb: Optional[int] = Field(50, description="Limit in MB for student storage")
 
 class InstitutionResponse(BaseModel):
     id: str
@@ -107,12 +111,16 @@ class InstitutionResponse(BaseModel):
     short_name: str
     domain: str
     extract_roll_from_email: bool
+    default_storage_limit: int
     created_at: datetime
     updated_at: datetime
     is_blocked: bool = False
 
     class Config:
         from_attributes = True
+
+class InstitutionStorageLimitRequest(BaseModel):
+    default_storage_limit_mb: int
 
 class FCMTokenUpdate(BaseModel):
     token: Optional[str] = None
