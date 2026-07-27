@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_key: str
     firebase_admin_credentials: str
+    firebase_json_str: str
 
 
     class Config:

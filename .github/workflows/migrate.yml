@@ -1,0 +1,30 @@
+name: Run Database Migrations (Neon)
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic Upgrade
+        env:
+          DATABASE_HOSTNAME: ${{ secrets.DB_HOST }}
+          DATABASE_PORT: 5432
+          DATABASE_USERNAME: ${{ secrets.DB_USER }}
+          DATABASE_PASSWORD: ${{ secrets.DB_PASS }}
+          DATABASE_NAME: ${{ secrets.DB_NAME }}
+        run: |
+          alembic upgrade head

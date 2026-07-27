@@ -1,3 +1,4 @@
+import json
 import firebase_admin
 from firebase_admin import credentials, messaging
 from fastapi import APIRouter, HTTPException, status, Depends
@@ -13,15 +14,33 @@ router = APIRouter(
     prefix="/api/notifications",
     tags=["Push Notifications"]
 )
-FIREBASE_KEY_PATH = settings.firebase_admin_credentials
+# FIREBASE_KEY_PATH = settings.firebase_admin_credentials
+
+# if not firebase_admin._apps:
+#     try:
+#         cred = credentials.Certificate(FIREBASE_KEY_PATH)
+#         firebase_admin.initialize_app(cred)
+#     except Exception as e:
+#         print(f"Warning: Failed to initialize Firebase Admin SDK. Push notifications will fail. {e}")
+
+firebase_secret = settings.firebase_json_str
 
 if not firebase_admin._apps:
     try:
-        cred = credentials.Certificate(FIREBASE_KEY_PATH)
+        if firebase_secret:
+            cred_dict = json.loads(firebase_secret)
+            cred = credentials.Certificate(cred_dict)
+        else:
+            local_file = settings.firebase_admin_credentials
+            if os.path.exists(local_file):
+                cred = credentials.Certificate(local_file)
+            else:
+                raise FileNotFoundError(f"Local credential file {local_file} not found.")
+            
         firebase_admin.initialize_app(cred)
+        print("Firebase Admin SDK initialized successfully.")
     except Exception as e:
-        print(f"Warning: Failed to initialize Firebase Admin SDK. Push notifications will fail. {e}")
-
+        print(f"Warning: Failed to initialize Firebase Admin SDK. Push notifications will fail. Error: {e}")
 
 @router.post("/send")
 def send_push_notification(payload: schemas.PushNotificationRequest):
