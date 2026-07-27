@@ -6,7 +6,7 @@ bcrypt==4.0.1
 certifi==2026.5.20
 cffi==2.0.0
 charset-normalizer==3.4.7
-click==8.1.8
+click
 cryptography==49.0.0
 deprecation==2.1.0
 dnspython==2.7.0
@@ -58,7 +58,7 @@ PyYAML==6.0.3
 realtime==2.31.0
 requests==2.32.5
 rich==15.0.0
-rich-toolkit==0.20.1
+rich-toolkit
 rignore==0.7.6
 rsa==4.9.1
 sentry-sdk==2.63.0
@@ -72,7 +72,7 @@ supabase==2.31.0
 supabase-auth==2.31.0
 supabase-functions==2.31.0
 tomli==2.4.1
-typer==0.23.2
+typer
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 ujson==5.11.0
