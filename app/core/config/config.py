@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -19,7 +20,7 @@ class Settings(BaseSettings):
     admin_password: str
     supabase_url: str
     supabase_key: str
-    firebase_admin_credentials: str
+    firebase_admin_credentials: Optional[str] = None
     firebase_json_str: str
 
 
