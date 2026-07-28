@@ -2,7 +2,14 @@ name: Run Database Migrations (Neon)
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
+    paths:
+      - "alembic/**"
+      - "alembic.ini"
+      - "app/models/**"
+
+  workflow_dispatch:
 
 jobs:
   migrate:
