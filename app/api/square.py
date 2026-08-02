@@ -47,7 +47,7 @@ def create_notice(
     db.commit()
     db.refresh(new_notice)
 
-    topic = "important_notices" if payload.urgent_until else "all_notices"
+    topic = f"{current_user.institution_id}_important_notices" if payload.urgent_until else f"{current_user.institution_id}_all_notices"
     title_prefix = "Urgent Notice" if payload.urgent_until else payload.category.value.title()
     
     body_snippet = payload.body[:100] + ("..." if len(payload.body) > 100 else "")
@@ -76,7 +76,6 @@ def get_notices(
         query = query.filter(models.Notice.category == category)
 
     return query.order_by(models.Notice.created_at.desc()).all()
-
 
 @router.delete("/notices/{notice_id}", status_code=status.HTTP_200_OK)
 def delete_notice(
@@ -129,7 +128,7 @@ def add_comment(
     if payload.parent_id:
         parent_comment = db.query(models.NoticeComment).filter(models.NoticeComment.id == payload.parent_id).first()
         if not parent_comment:
-             raise HTTPException(status_code=404, detail="Parent comment not found.")
+            raise HTTPException(status_code=404, detail="Parent comment not found.")
 
     new_comment = models.NoticeComment(
         id=str(uuid.uuid4()),
@@ -144,7 +143,6 @@ def add_comment(
     db.refresh(new_comment)
 
     return new_comment
-
 
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_200_OK)
 def delete_comment(

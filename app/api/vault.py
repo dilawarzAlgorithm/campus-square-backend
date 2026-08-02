@@ -1,6 +1,7 @@
 import uuid
 import hashlib
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 
@@ -154,10 +155,9 @@ def upload_resource(
         department_id=payload.department_id,
         uploader_id=current_user.id
     )
+
     db.add(new_resource)
-    
     current_user.karma += 10
-    
     db.commit()
     db.refresh(new_resource)
 
@@ -165,7 +165,7 @@ def upload_resource(
         trigger_push_notification,
         title="New Study Material Added!",
         body=f"{current_user.first_name} uploaded '{new_resource.title}' to the Vault.",
-        topic="resources",
+        topic=f"{current_user.institution_id}_resources",
         data_payload={"resource_id": new_resource.id, "type": "vault", "sender_id": current_user.id}
     )
 
@@ -214,6 +214,7 @@ def update_resource(
 
     db.commit()
     db.refresh(resource)
+
     return resource
 
 @router.get("/resources", response_model=List[schemas.ResourceResponse])
@@ -280,6 +281,7 @@ def delete_resource(
         )
         
     file_url = resource.file_url
+
     db.delete(resource)
     db.commit()
 
@@ -335,6 +337,7 @@ def vote_resource(
                     uploader.karma = max(0, uploader.karma - 5)
 
             existing_vote.vote_type = payload.vote_type
+
     else:
         new_vote = models.ResourceVote(
             id=str(uuid.uuid4()),
@@ -363,7 +366,6 @@ def vote_resource(
 
     return resource
 
-
 @router.post("/resources/{resource_id}/save")
 def toggle_save_resource(
     resource_id: str,
@@ -385,7 +387,6 @@ def toggle_save_resource(
         db.commit()
         return {"message": "Resource saved", "is_saved": True}
 
-
 @router.get("/saved-resource-ids", response_model=List[str])
 def get_saved_resource_ids(
     current_user: models.User = Depends(get_current_user),
@@ -405,7 +406,7 @@ def get_saved_resources(
 
     if not resource_ids:
         return []
-    
+
     resources = db.query(models.AcademicResource).filter(models.AcademicResource.id.in_(resource_ids)).all()
 
     resource_ids = [r.id for r in resources]
