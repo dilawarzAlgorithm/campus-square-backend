@@ -16,7 +16,7 @@ jobs:
         env:
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: campus_square_test
+          POSTGRES_DB: campus_square
 
         # Wait until postgres has fully started before moving on to the tests
         options: >-
@@ -46,7 +46,7 @@ jobs:
           DATABASE_PORT: 5432
           DATABASE_USERNAME: test_user
           DATABASE_PASSWORD: test_password
-          DATABASE_NAME: campus_square_test
+          DATABASE_NAME: campus_square
 
           # Dummy variables so Pydantic doesn't crash on startup
           SECRET_KEY: ""
