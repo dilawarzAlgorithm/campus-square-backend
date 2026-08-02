@@ -16,7 +16,7 @@ jobs:
         env:
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: campus_square
+          POSTGRES_DB: campus_square_test
 
         # Wait until postgres has fully started before moving on to the tests
         options: >-
