@@ -16,7 +16,7 @@ jobs:
         env:
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: campus_square_test
+          POSTGRES_DB: campus_square
 
         # Wait until postgres has fully started before moving on to the tests
         options: >-
@@ -39,6 +39,12 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install -r requirements.txt
+
+      - name: Create Pytest Database
+        env:
+          PGPASSWORD: test_password
+        run: |
+          psql -h localhost -U test_user -d campus_square -c "CREATE DATABASE campus_square_test;"
 
       - name: Run Pytest
         env:
