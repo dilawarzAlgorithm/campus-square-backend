@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, ForeignKey, Enum as SQLEnum, TIMESTAMP, text as sa_text
+from sqlalchemy import Column, String, ForeignKey, Enum as SQLEnum, TIMESTAMP, text as sa_text, Integer
 from sqlalchemy.orm import relationship, backref
 
 from app.core.database.database import Base
-from app.enum.enum import SquareCategory
+from app.enum.enum import SquareCategory, VoteType
 
 class Notice(Base):
     __tablename__ = "notices"
@@ -17,6 +17,9 @@ class Notice(Base):
     image_url = Column(String, nullable=True)
     file_url = Column(String, nullable=True)
     
+    upvote_count = Column(Integer, default=0, server_default="0", nullable=False)
+    downvote_count = Column(Integer, default=0, server_default="0", nullable=False)
+    
     created_at = Column(TIMESTAMP(timezone=True), server_default=sa_text('now()'), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=sa_text('now()'), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -27,6 +30,17 @@ class Notice(Base):
     author = relationship("User")
     
     comments = relationship("NoticeComment", back_populates="notice", cascade="all, delete-orphan", order_by="desc(NoticeComment.created_at)")
+    votes = relationship("NoticeVote", back_populates="notice", cascade="all, delete-orphan")
+
+class NoticeVote(Base):
+    __tablename__ = "notice_votes"
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    notice_id = Column(String, ForeignKey("notices.id", ondelete="CASCADE"), nullable=False)
+    vote_type = Column(SQLEnum(VoteType), nullable=False)
+    
+    user = relationship("User")
+    notice = relationship("Notice", back_populates="votes")
 
 class NoticeComment(Base):
     __tablename__ = "notice_comments"

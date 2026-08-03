@@ -32,3 +32,4 @@ class SquareCategory(str, Enum):
     RIDE_POOL = "RIDE_POOL"
     LOST_FOUND = "LOST_FOUND"
     EVENT = "EVENT"
+    COMPLAINT = "COMPLAINT"

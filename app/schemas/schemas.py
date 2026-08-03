@@ -38,6 +38,7 @@ from app.schemas.community import (
 )
 
 from app.schemas.square import (
+    VoteRequest,
     NoticeAuthor,
     CommentCreate,
     CommentResponse,

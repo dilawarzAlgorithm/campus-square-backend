@@ -1,8 +1,11 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from datetime import datetime
-from app.enum.enum import SquareCategory, UserRole
+from app.enum.enum import SquareCategory, UserRole, VoteType
 from app.schemas.auth import ProfileSchema
+
+class VoteRequest(BaseModel):
+    vote_type: VoteType
 
 class NoticeAuthor(BaseModel):
     id: str
@@ -47,6 +50,9 @@ class NoticeResponse(BaseModel):
     urgent_until: Optional[datetime]
     image_url: Optional[str]
     file_url: Optional[str]
+    upvote_count: int = 0
+    downvote_count: int = 0
+    my_vote: Optional[VoteType] = None
     created_at: datetime
     updated_at: datetime
     author: NoticeAuthor

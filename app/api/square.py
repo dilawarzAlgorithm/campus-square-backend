@@ -7,7 +7,7 @@ from app.core.database.database import get_db
 from app.models import models
 from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
-from app.enum.enum import SquareCategory, UserRole
+from app.enum.enum import SquareCategory, UserRole, VoteType
 from app.core.features.storage import handle_file_deletion
 from app.api.notification import trigger_push_notification
 
@@ -75,7 +75,83 @@ def get_notices(
     if category:
         query = query.filter(models.Notice.category == category)
 
-    return query.order_by(models.Notice.created_at.desc()).all()
+    notices = query.order_by(models.Notice.created_at.desc()).all()
+
+    notice_ids = [n.id for n in notices]
+    user_votes = db.query(models.NoticeVote).filter(
+        models.NoticeVote.user_id == current_user.id,
+        models.NoticeVote.notice_id.in_(notice_ids)
+    ).all()
+    
+    vote_map = {v.notice_id: v.vote_type for v in user_votes}
+    for n in notices:
+        setattr(n, 'my_vote', vote_map.get(n.id))
+        
+    return notices
+
+@router.post("/notices/{notice_id}/vote", response_model=schemas.NoticeResponse)
+def vote_notice(
+    notice_id: str,
+    payload: schemas.VoteRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    notice = db.query(models.Notice).filter(
+        models.Notice.id == notice_id,
+        models.Notice.institution_id == current_user.institution_id
+    ).first()
+
+    if not notice:
+        raise HTTPException(status_code=404, detail="Notice not found.")
+
+    author = db.query(models.User).filter(models.User.id == notice.author_id).first()
+    existing_vote = db.query(models.NoticeVote).filter(
+        models.NoticeVote.user_id == current_user.id,
+        models.NoticeVote.notice_id == notice_id
+    ).first()
+
+    if existing_vote:
+        if existing_vote.vote_type == payload.vote_type:
+            if payload.vote_type == VoteType.UPVOTE:
+                notice.upvote_count = max(0, notice.upvote_count - 1)
+                if author: author.karma = max(0, author.karma - 2)
+            else:
+                notice.downvote_count = max(0, notice.downvote_count - 1)
+            db.delete(existing_vote)
+        else:
+            if payload.vote_type == VoteType.UPVOTE:
+                notice.upvote_count += 1
+                notice.downvote_count = max(0, notice.downvote_count - 1)
+                if author: author.karma += 2
+            else:
+                notice.downvote_count += 1
+                notice.upvote_count = max(0, notice.upvote_count - 1)
+                if author: author.karma = max(0, author.karma - 2)
+            existing_vote.vote_type = payload.vote_type
+    else:
+        new_vote = models.NoticeVote(
+            id=str(uuid.uuid4()),
+            user_id=current_user.id,
+            notice_id=notice_id,
+            vote_type=payload.vote_type
+        )
+        db.add(new_vote)
+        if payload.vote_type == VoteType.UPVOTE:
+            notice.upvote_count += 1
+            if author: author.karma += 2
+        else:
+            notice.downvote_count += 1
+
+    db.commit()
+    db.refresh(notice)
+
+    final_vote = db.query(models.NoticeVote).filter(
+        models.NoticeVote.user_id == current_user.id,
+        models.NoticeVote.notice_id == notice_id
+    ).first()
+    
+    setattr(notice, 'my_vote', final_vote.vote_type if final_vote else None)
+    return notice
 
 @router.delete("/notices/{notice_id}", status_code=status.HTTP_200_OK)
 def delete_notice(
