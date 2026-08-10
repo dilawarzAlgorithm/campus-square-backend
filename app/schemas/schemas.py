@@ -67,5 +67,6 @@ from app.schemas.bazaar import (
 )
 
 from app.schemas.config import (
-    AppConfigResponse
+    AppConfigResponse,
+    AppConfigUpdate
 )
