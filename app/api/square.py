@@ -2,6 +2,7 @@ import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
 from app.core.database.database import get_db
 from app.models import models
@@ -47,24 +48,25 @@ def create_notice(
     db.commit()
     db.refresh(new_notice)
 
-    topic = f"{current_user.institution_id}_important_notices" if payload.urgent_until else f"{current_user.institution_id}_all_notices"
-    title_prefix = "Urgent Notice" if payload.urgent_until else payload.category.value.title()
-    
-    body_snippet = payload.body[:100] + ("..." if len(payload.body) > 100 else "")
-    
-    background_tasks.add_task(
-        trigger_push_notification,
-        title=f"{title_prefix}: {payload.title}",
-        body=body_snippet,
-        topic=topic,
-        data_payload={"notice_id": new_notice.id, "type": "square", "sender_id": current_user.id}
-    )
+    if payload.category in official_categories or payload.urgent_until:
+        topic = f"{current_user.institution_id}_important_notices" if payload.urgent_until else f"{current_user.institution_id}_all_notices"
+        title_prefix = "Urgent Notice" if payload.urgent_until else payload.category.value.title()
+        body_snippet = payload.body[:100] + ("..." if len(payload.body) > 100 else "")
+        
+        background_tasks.add_task(
+            trigger_push_notification,
+            title=f"{title_prefix}: {payload.title}",
+            body=body_snippet,
+            topic=topic,
+            data_payload={"notice_id": new_notice.id, "type": "square", "sender_id": current_user.id}
+        )
 
     return new_notice
 
 @router.get("/notices", response_model=List[schemas.NoticeResponse])
 def get_notices(
     category: Optional[SquareCategory] = None,
+    sort_by: str = Query("newest"),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -74,8 +76,15 @@ def get_notices(
 
     if category:
         query = query.filter(models.Notice.category == category)
+        if sort_by == "upvotes":
+            query = query.order_by(desc(models.Notice.upvote_count), desc(models.Notice.created_at))
+        else:
+            query = query.order_by(desc(models.Notice.created_at))
+    else:
+        query = query.filter(models.Notice.category != SquareCategory.RANDOM)
+        query = query.order_by(desc(models.Notice.created_at))
 
-    notices = query.order_by(models.Notice.created_at.desc()).all()
+    notices = query.all()
 
     notice_ids = [n.id for n in notices]
     user_votes = db.query(models.NoticeVote).filter(
@@ -84,6 +93,7 @@ def get_notices(
     ).all()
     
     vote_map = {v.notice_id: v.vote_type for v in user_votes}
+
     for n in notices:
         setattr(n, 'my_vote', vote_map.get(n.id))
         
@@ -105,6 +115,7 @@ def vote_notice(
         raise HTTPException(status_code=404, detail="Notice not found.")
 
     author = db.query(models.User).filter(models.User.id == notice.author_id).first()
+
     existing_vote = db.query(models.NoticeVote).filter(
         models.NoticeVote.user_id == current_user.id,
         models.NoticeVote.notice_id == notice_id
@@ -151,6 +162,7 @@ def vote_notice(
     ).first()
     
     setattr(notice, 'my_vote', final_vote.vote_type if final_vote else None)
+
     return notice
 
 @router.delete("/notices/{notice_id}", status_code=status.HTTP_200_OK)
@@ -178,6 +190,7 @@ def delete_notice(
         
     image_url = notice.image_url
     file_url = notice.file_url
+
     db.delete(notice)
     db.commit()
 

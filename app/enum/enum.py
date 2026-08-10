@@ -33,6 +33,7 @@ class SquareCategory(str, Enum):
     LOST_FOUND = "LOST_FOUND"
     EVENT = "EVENT"
     COMPLAINT = "COMPLAINT"
+    RANDOM = "RANDOM"
 
 class BazaarCategory(str, Enum):
     TEXTBOOK = "TEXTBOOK"
