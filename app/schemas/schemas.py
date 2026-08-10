@@ -58,3 +58,10 @@ from app.schemas.notification import (
     PushNotificationRequest,
     BroadcastRequest
 )
+
+from app.schemas.bazaar import (
+    ProductCreate,
+    ProductUpdate,
+    ProductResponse,
+    ProductSeller
+)

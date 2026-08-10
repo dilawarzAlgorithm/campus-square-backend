@@ -33,3 +33,17 @@ class SquareCategory(str, Enum):
     LOST_FOUND = "LOST_FOUND"
     EVENT = "EVENT"
     COMPLAINT = "COMPLAINT"
+
+class BazaarCategory(str, Enum):
+    TEXTBOOK = "TEXTBOOK"
+    ELECTRONICS = "ELECTRONICS"
+    FURNITURE = "FURNITURE"
+    CLOTHING = "CLOTHING"
+    STATIONERY = "STATIONERY"
+    OTHER = "OTHER"
+
+class ItemCondition(str, Enum):
+    NEW = "NEW"
+    LIKE_NEW = "LIKE_NEW"
+    GOOD = "GOOD"
+    FAIR = "FAIR"
