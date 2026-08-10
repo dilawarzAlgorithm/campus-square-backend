@@ -48,18 +48,17 @@ def create_notice(
     db.commit()
     db.refresh(new_notice)
 
-    if payload.category in official_categories or payload.urgent_until:
-        topic = f"{current_user.institution_id}_important_notices" if payload.urgent_until else f"{current_user.institution_id}_all_notices"
-        title_prefix = "Urgent Notice" if payload.urgent_until else payload.category.value.title()
-        body_snippet = payload.body[:100] + ("..." if len(payload.body) > 100 else "")
-        
-        background_tasks.add_task(
-            trigger_push_notification,
-            title=f"{title_prefix}: {payload.title}",
-            body=body_snippet,
-            topic=topic,
-            data_payload={"notice_id": new_notice.id, "type": "square", "sender_id": current_user.id}
-        )
+    topic = f"{current_user.institution_id}_important_notices" if payload.urgent_until else f"{current_user.institution_id}_all_notices"
+    title_prefix = "Urgent Notice" if payload.urgent_until else payload.category.value.replace("_", " ").title()
+    body_snippet = payload.body[:100] + ("..." if len(payload.body) > 100 else "")
+    
+    background_tasks.add_task(
+        trigger_push_notification,
+        title=f"{title_prefix}: {payload.title}",
+        body=body_snippet,
+        topic=topic,
+        data_payload={"notice_id": new_notice.id, "type": "square", "sender_id": current_user.id}
+    )
 
     return new_notice
 

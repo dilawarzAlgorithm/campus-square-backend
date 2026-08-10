@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.core.database.database import get_db
@@ -9,6 +9,7 @@ from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
 from app.enum.enum import BazaarCategory, UserRole
 from app.core.features.storage import handle_file_deletion
+from app.api.notification import trigger_push_notification
 
 router = APIRouter(
     prefix="/api/bazaar",
@@ -18,6 +19,7 @@ router = APIRouter(
 @router.post("/products", response_model=schemas.ProductResponse, status_code=status.HTTP_201_CREATED)
 def create_product(
     payload: schemas.ProductCreate,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -35,6 +37,15 @@ def create_product(
     db.add(new_product)
     db.commit()
     db.refresh(new_product)
+
+    background_tasks.add_task(
+        trigger_push_notification,
+        title="New in Bazaar",
+        body=f"{current_user.first_name} listed '{new_product.title}' for ₹{new_product.price:.0f}.",
+        topic=f"{current_user.institution_id}_all_notices",
+        data_payload={"product_id": new_product.id, "type": "bazaar", "sender_id": current_user.id}
+    )
+
     return new_product
 
 @router.get("/products", response_model=List[schemas.ProductResponse])
