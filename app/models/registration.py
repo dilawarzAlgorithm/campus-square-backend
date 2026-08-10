@@ -17,6 +17,19 @@ class Institution(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+    campaign_version_id = Column(String, default="v1")
+    show_popup = Column(Boolean, default=False)
+    popup_title = Column(String, nullable=True)
+    popup_message = Column(String, nullable=True)
+    lottie_url = Column(String, nullable=True)
+    target_route = Column(String, nullable=True)
+    
+    show_banner = Column(Boolean, default=False)
+    banner_title = Column(String, nullable=True)
+    banner_message = Column(String, nullable=True)
+    banner_action_url = Column(String, nullable=True)
+    primary_color_hex = Column(String, nullable=True)
+
     users = relationship("User", back_populates="institution", cascade="all, delete-orphan")
     departments = relationship("Department", back_populates="institution", cascade="all, delete-orphan")
 

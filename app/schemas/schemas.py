@@ -65,3 +65,7 @@ from app.schemas.bazaar import (
     ProductResponse,
     ProductSeller
 )
+
+from app.schemas.config import (
+    AppConfigResponse
+)

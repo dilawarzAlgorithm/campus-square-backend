@@ -6,6 +6,7 @@ from app.models import models
 from app.schemas import schemas
 from app.core.auth.oauth2 import get_current_user
 from app.enum.enum import UserRole
+from app.schemas.config import AppConfigUpdate, AppConfigResponse
 
 router = APIRouter(
     prefix="/api/community",
@@ -19,6 +20,48 @@ def require_community_head(current_user: models.User = Depends(get_current_user)
             detail="Not authorized to perform community management actions."
         )
     return current_user
+
+@router.patch("/settings/campaign", response_model=AppConfigResponse)
+def update_campaign(
+    payload: AppConfigUpdate,
+    current_user: models.User = Depends(require_community_head),
+    db: Session = Depends(get_db)
+):
+    inst = db.query(models.Institution).filter(models.Institution.id == current_user.institution_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Institution not found.")
+        
+    if payload.version_id is not None: inst.campaign_version_id = payload.version_id
+    if payload.show_popup is not None: inst.show_popup = payload.show_popup
+    if payload.popup_title is not None: inst.popup_title = payload.popup_title
+    if payload.popup_message is not None: inst.popup_message = payload.popup_message
+    if payload.lottie_url is not None: inst.lottie_url = payload.lottie_url
+    if payload.target_route is not None: inst.target_route = payload.target_route
+    
+    if payload.show_banner is not None: inst.show_banner = payload.show_banner
+    if payload.banner_title is not None: inst.banner_title = payload.banner_title
+    if payload.banner_message is not None: inst.banner_message = payload.banner_message
+    if payload.banner_action_url is not None: inst.banner_action_url = payload.banner_action_url
+    
+    if payload.primary_color_hex is not None: 
+        inst.primary_color_hex = payload.primary_color_hex if payload.primary_color_hex.strip() else None
+
+    db.commit()
+    db.refresh(inst)
+
+    return AppConfigResponse(
+        version_id=inst.campaign_version_id or "v1",
+        show_popup=inst.show_popup or False,
+        popup_title=inst.popup_title,
+        popup_message=inst.popup_message,
+        lottie_url=inst.lottie_url,
+        target_route=inst.target_route,
+        show_banner=inst.show_banner or False,
+        banner_title=inst.banner_title,
+        banner_message=inst.banner_message,
+        banner_action_url=inst.banner_action_url,
+        primary_color_hex=inst.primary_color_hex
+    )
 
 @router.get("/members", response_model=List[schemas.UserResponse])
 def get_community_members(
