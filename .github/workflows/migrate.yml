@@ -10,6 +10,20 @@ on:
       - "app/models/**"
 
   workflow_dispatch:
+    inputs:
+      action:
+        description: "Alembic Action"
+        required: true
+        default: "upgrade"
+        type: choice
+        options:
+          - upgrade
+          - downgrade
+      target:
+        description: 'Target Revision (e.g., "head", "-1", "+1", "base", or specific revision_id)'
+        required: true
+        default: "head"
+        type: string
 
 jobs:
   migrate:
@@ -26,7 +40,7 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
-      - name: Run Alembic Upgrade
+      - name: Execute Alembic Migration
         env:
           DATABASE_HOSTNAME: ${{ secrets.DATABASE_HOSTNAME }}
           DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
@@ -48,4 +62,10 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           FIREBASE_JSON_STR: ${{ secrets.FIREBASE_JSON_STR }}
         run: |
-          alembic upgrade head
+          if [ "${{ github.event_name }}" == "push" ]; then
+            echo "Push event detected. Running automatic upgrade to head..."
+            alembic upgrade head
+          else
+            echo "Manual workflow dispatch detected: Running 'alembic ${{ inputs.action }} ${{ inputs.target }}'"
+            alembic ${{ inputs.action }} ${{ inputs.target }}
+          fi
