@@ -7,6 +7,7 @@ class ProfileSchema(BaseModel):
     dietary_preference: Optional[str] = None
     sleep_schedule: Optional[str] = None
     study_habits: Optional[str] = None
+
     class Config:
         from_attributes = True
 
@@ -37,6 +38,8 @@ class UserResponse(BaseModel):
     department_name: Optional[str] = None
     profile: Optional[ProfileSchema] = None
     karma_tier: Optional[KarmaTierInfo] = None
+    recovery_email: Optional[str] = None
+
     class Config:
         from_attributes = True
 
@@ -69,6 +72,14 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str
+    new_password: str = Field(..., min_length=8)
+
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str = Field(..., min_length=8)
@@ -93,6 +104,13 @@ class ResendOtp(BaseModel):
 
 class OTPVerificationRequest(BaseModel):
     email: EmailStr
+    otp: str
+
+class RecoveryEmailOtpRequest(BaseModel):
+    recovery_email: EmailStr
+
+class VerifyRecoveryEmailRequest(BaseModel):
+    recovery_email: EmailStr
     otp: str
 
 class InstitutionCreateRequest(BaseModel):

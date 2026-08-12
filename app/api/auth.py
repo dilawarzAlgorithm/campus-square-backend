@@ -199,6 +199,85 @@ def resend_otp(payload: schemas.ResendOtp, background_task: BackgroundTasks, db:
     background_task.add_task(send_otp_email, user.email, otp, user.first_name)
     return {"success": True, "message": "A new verification code has been sent."}
 
+@router.post("/forgot-password")
+def forgot_password(payload: schemas.ForgotPasswordRequest, background_task: BackgroundTasks, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == payload.email.lower()).first()
+    
+    if not user:
+        return {"success": True, "message": "If that email is registered, an OTP has been sent."}
+    
+    target_email = user.email
+    if user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD] and user.recovery_email:
+        target_email = user.recovery_email
+
+    otp = generate_otp()
+    user.verification_otp = otp
+    user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+    db.commit()
+
+    background_task.add_task(send_otp_email, target_email, otp, user.first_name)
+    return {"success": True, "message": "If that email is registered, an OTP has been sent."}
+
+
+@router.post("/reset-password")
+def reset_password(payload: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == payload.email.lower()).first()
+    
+    if not user or user.verification_otp != payload.otp:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP code.")
+        
+    if datetime.now(timezone.utc) > user.otp_expires_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired.")
+        
+    if verify(payload.new_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password cannot be the same as the old password.")
+
+    user.password_hash = hash(payload.new_password)
+    user.verification_otp = None
+    user.otp_expires_at = None
+    user.requires_password_change = False
+    
+    db.commit()
+    return {"success": True, "message": "Password successfully reset. You can now log in."}
+
+
+@router.post("/recovery-email/request-otp")
+def request_recovery_email_otp(payload: schemas.RecoveryEmailOtpRequest, background_task: BackgroundTasks, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Only Staff and Administrators can set a dedicated recovery email."
+        )
+        
+    otp = generate_otp()
+    current_user.verification_otp = otp
+    current_user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+    db.commit()
+
+    background_task.add_task(send_otp_email, payload.recovery_email.lower(), otp, current_user.first_name)
+    return {"success": True, "message": "OTP sent to the new recovery email."}
+
+
+@router.post("/recovery-email/verify")
+def verify_recovery_email(payload: schemas.VerifyRecoveryEmailRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Only Staff and Administrators can set a dedicated recovery email."
+        )
+        
+    if not current_user.verification_otp or current_user.verification_otp != payload.otp:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP code.")
+        
+    if datetime.now(timezone.utc) > current_user.otp_expires_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired.")
+        
+    current_user.recovery_email = payload.recovery_email.lower()
+    current_user.verification_otp = None
+    current_user.otp_expires_at = None
+    db.commit()
+    
+    return {"success": True, "message": "Recovery email verified and updated."}
 
 @router.post("/login", response_model=schemas.Token)
 def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):

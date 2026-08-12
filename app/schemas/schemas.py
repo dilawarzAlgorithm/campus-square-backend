@@ -17,7 +17,11 @@ from app.schemas.auth import (
     InstitutionResponse,
     KarmaTierInfo,
     FCMTokenUpdate,
-    InstitutionStorageLimitRequest
+    InstitutionStorageLimitRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    RecoveryEmailOtpRequest,
+    VerifyRecoveryEmailRequest,
 )
 
 from app.schemas.vault import (
