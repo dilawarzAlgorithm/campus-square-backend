@@ -98,3 +98,5 @@ def downgrade() -> None:
     op.execute("DROP TYPE IF EXISTS votetype CASCADE;")
     op.execute("DROP TYPE IF EXISTS semester CASCADE;")
     op.execute("DROP TYPE IF EXISTS squarecategory CASCADE;")
+    op.execute("DROP TYPE IF EXISTS bazaarcategory CASCADE;")
+    op.execute("DROP TYPE IF EXISTS itemcondition CASCADE;")
