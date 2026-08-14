@@ -12,13 +12,19 @@ from app.api.notification import send_token_push_notification
 router = APIRouter(prefix="/api/hubs", tags=["Campus Hubs (Clubs & Study Groups)"])
 
 @router.get("", response_model=List[hub_schemas.HubResponse])
-def get_hubs(type: Optional[str] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_hubs(type: Optional[str] = None, parent_id: Optional[str] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(models.Conversation).filter(
-        models.Conversation.institution_id == current_user.institution_id,
-        models.Conversation.type.in_(["CLUB", "STUDY_GROUP"])
+        models.Conversation.institution_id == current_user.institution_id
     )
     if type:
         query = query.filter(models.Conversation.type == type)
+    else:
+        query = query.filter(models.Conversation.type.in_(["CLUB", "STUDY_GROUP"]))
+        
+    if parent_id:
+        query = query.filter(models.Conversation.parent_id == parent_id)
+    elif type != "TEAM":
+        query = query.filter(models.Conversation.parent_id == None)
 
     conversations = query.all()
     result = []
@@ -33,6 +39,7 @@ def get_hubs(type: Optional[str] = None, current_user: models.User = Depends(get
         is_member = participant is not None and participant.is_approved
         is_pending = participant is not None and not participant.is_approved
         is_admin = participant is not None and participant.is_admin
+        is_lead = participant is not None and participant.is_lead
         is_saved = saved_map.get(conv.id, False)
 
         result.append(hub_schemas.HubResponse(
@@ -45,7 +52,9 @@ def get_hubs(type: Optional[str] = None, current_user: models.User = Depends(get
             member_count=member_count,
             is_member=is_member,
             is_admin=is_admin,
+            is_lead=is_lead,
             is_pending=is_pending,
+            parent_id=conv.parent_id,
             is_saved=is_saved,
             created_at=conv.created_at
         ))
@@ -56,6 +65,14 @@ def create_hub(payload: hub_schemas.HubCreate, current_user: models.User = Depen
     if payload.type == "CLUB" and current_user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
         raise HTTPException(status_code=403, detail="Only staff can create official clubs.")
 
+    if payload.type == "TEAM" and payload.parent_id:
+        parent_hub = db.query(models.Conversation).filter_by(id=payload.parent_id).first()
+        if not parent_hub:
+            raise HTTPException(status_code=404, detail="Parent Club not found.")
+        parent_participant = db.query(models.ConversationParticipant).filter_by(conversation_id=parent_hub.id, user_id=current_user.id, is_admin=True).first()
+        if not parent_participant and current_user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
+            raise HTTPException(status_code=403, detail="Only Club Admins or Staff can create teams.")
+
     new_hub = models.Conversation(
         id=str(uuid.uuid4()),
         type=payload.type,
@@ -63,7 +80,8 @@ def create_hub(payload: hub_schemas.HubCreate, current_user: models.User = Depen
         description=payload.description.strip(),
         privacy=payload.privacy,
         avatar_url=payload.avatar_url,
-        institution_id=current_user.institution_id
+        institution_id=current_user.institution_id,
+        parent_id=payload.parent_id
     )
     db.add(new_hub)
     db.flush()
@@ -88,10 +106,56 @@ def create_hub(payload: hub_schemas.HubCreate, current_user: models.User = Depen
         member_count=1,
         is_member=True,
         is_admin=True,
+        is_lead=False,
         is_pending=False,
+        parent_id=new_hub.parent_id,
         is_saved=False,
         created_at=new_hub.created_at
     )
+
+@router.patch("/{hub_id}/members/{user_id}/make-lead")
+def make_team_lead(hub_id: str, user_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    hub = db.query(models.Conversation).filter_by(id=hub_id).first()
+    if not hub: raise HTTPException(status_code=404, detail="Hub not found")
+         
+    is_staff = current_user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]
+    if not is_staff and hub.parent_id:
+        parent_admin = db.query(models.ConversationParticipant).filter_by(conversation_id=hub.parent_id, user_id=current_user.id, is_admin=True).first()
+        if not parent_admin:
+            raise HTTPException(status_code=403, detail="Only parent Club Admins can assign Team Leads.")
+                 
+    participant = db.query(models.ConversationParticipant).filter_by(conversation_id=hub_id, user_id=user_id).first()
+    if not participant:
+        participant = models.ConversationParticipant(
+            id=str(uuid.uuid4()),
+            conversation_id=hub_id,
+            user_id=user_id,
+            is_approved=True,
+            is_lead=True
+        )
+        db.add(participant)
+    else:
+        participant.is_lead = True
+        participant.is_approved = True
+    db.commit()
+    return {"success": True, "message": "User is now a Team Lead."}
+
+@router.patch("/{hub_id}/members/{user_id}/remove-lead")
+def remove_team_lead(hub_id: str, user_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    hub = db.query(models.Conversation).filter_by(id=hub_id).first()
+    if not hub: raise HTTPException(status_code=404, detail="Hub not found")
+    
+    is_staff = current_user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]
+    if not is_staff and hub.parent_id:
+        parent_admin = db.query(models.ConversationParticipant).filter_by(conversation_id=hub.parent_id, user_id=current_user.id, is_admin=True).first()
+        if not parent_admin:
+            raise HTTPException(status_code=403, detail="Only parent Club Admins can remove Team Leads.")
+            
+    participant = db.query(models.ConversationParticipant).filter_by(conversation_id=hub_id, user_id=user_id).first()
+    if participant:
+        participant.is_lead = False
+        db.commit()
+    return {"success": True, "message": "Team Lead status removed."}
 
 @router.post("/{hub_id}/join")
 def join_hub(hub_id: str, background_tasks: BackgroundTasks, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):

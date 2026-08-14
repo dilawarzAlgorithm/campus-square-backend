@@ -6,9 +6,10 @@ from app.enum.enum import HubPrivacy
 class HubCreate(BaseModel):
     name: str
     description: str
-    type: str # 'CLUB' or 'STUDY_GROUP'
+    type: str # 'CLUB', 'STUDY_GROUP', or 'TEAM'
     privacy: HubPrivacy
     avatar_url: Optional[str] = None
+    parent_id: Optional[str] = None
 
 class HubResponse(BaseModel):
     id: str
@@ -20,7 +21,9 @@ class HubResponse(BaseModel):
     member_count: int = 0
     is_member: bool = False
     is_admin: bool = False
+    is_lead: bool = False
     is_pending: bool = False
+    parent_id: Optional[str] = None
     is_saved: bool = False
     created_at: datetime
 

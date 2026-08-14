@@ -9,6 +9,8 @@ class ChatUser(BaseModel):
     role: str
     is_online: Optional[bool] = False
     last_seen: Optional[datetime] = None
+    is_hub_admin: Optional[bool] = False
+    is_hub_lead: Optional[bool] = False
 
     class Config:
         from_attributes = True

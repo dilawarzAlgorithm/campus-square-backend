@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, ForeignKey, TIMESTAMP, Boolean, text, Enum as SQLEnum
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.core.database.database import Base
 from app.enum.enum import HubPrivacy
 
@@ -17,9 +17,11 @@ class Conversation(Base):
     institution_id = Column(String, ForeignKey("institutions.id", ondelete="CASCADE"), nullable=True)
     
     department_id = Column(String, ForeignKey("departments.id", ondelete="CASCADE"), nullable=True)
+    parent_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     
     participants = relationship("ConversationParticipant", back_populates="conversation", cascade="all, delete-orphan")
+    sub_hubs = relationship("Conversation", backref=backref("parent", remote_side=[id]), cascade="all, delete-orphan")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan", order_by="asc(Message.created_at)")
 
 class ConversationParticipant(Base):
@@ -31,6 +33,7 @@ class ConversationParticipant(Base):
     is_blocked = Column(Boolean, default=False)
     
     is_admin = Column(Boolean, default=False)
+    is_lead = Column(Boolean, default=False)
     is_approved = Column(Boolean, default=True)
     
     conversation = relationship("Conversation", back_populates="participants")

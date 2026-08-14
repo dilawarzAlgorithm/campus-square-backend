@@ -336,9 +336,11 @@ def get_messages(
     is_participant = db.query(models.ConversationParticipant).filter(
         models.ConversationParticipant.conversation_id == conversation_id,
         models.ConversationParticipant.user_id == current_user.id,
-        models.ConversationParticipant.is_approved == True
+        or_(
+            models.ConversationParticipant.is_approved == True,
+            models.ConversationParticipant.is_approved.is_(None)
+        )
     ).first()
-
     if not is_participant:
         raise HTTPException(status_code=403, detail="Not a participant in this conversation.")
 
@@ -346,7 +348,53 @@ def get_messages(
         models.Message.conversation_id == conversation_id
     ).order_by(models.Message.created_at.desc()).limit(50).all()
     
-    return messages
+    participants = db.query(models.ConversationParticipant).filter_by(conversation_id=conversation_id).all()
+    p_map = {p.user_id: p for p in participants}
+
+    response_messages = []
+    for msg in messages:
+        sender_p = p_map.get(msg.sender_id)
+        
+        reply_dict = None
+        if msg.reply_to:
+            rp = p_map.get(msg.reply_to.sender_id)
+            reply_dict = {
+                "id": msg.reply_to.id,
+                "content": msg.reply_to.content,
+                "sender": {
+                    "id": msg.reply_to.sender.id,
+                    "first_name": msg.reply_to.sender.first_name,
+                    "last_name": msg.reply_to.sender.last_name,
+                    "role": msg.reply_to.sender.role.value,
+                    "is_online": msg.reply_to.sender.is_online,
+                    "last_seen": msg.reply_to.sender.last_seen,
+                    "is_hub_admin": rp.is_admin if rp else False,
+                    "is_hub_lead": rp.is_lead if rp else False
+                }
+            }
+
+        response_messages.append({
+            "id": msg.id,
+            "conversation_id": msg.conversation_id,
+            "content": msg.content,
+            "created_at": msg.created_at,
+            "is_delivered": msg.is_delivered,
+            "is_read": msg.is_read,
+            "is_deleted": msg.is_deleted,
+            "is_edited": msg.is_edited,
+            "reply_to": reply_dict,
+            "sender": {
+                "id": msg.sender.id,
+                "first_name": msg.sender.first_name,
+                "last_name": msg.sender.last_name,
+                "role": msg.sender.role.value,
+                "is_online": msg.sender.is_online,
+                "last_seen": msg.sender.last_seen,
+                "is_hub_admin": sender_p.is_admin if sender_p else False,
+                "is_hub_lead": sender_p.is_lead if sender_p else False
+            }
+        })
+    return response_messages
 
 
 @router.websocket("/ws/hub")
@@ -440,6 +488,10 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
                                 }
                             }
 
+                    sender_participant = db.query(models.ConversationParticipant).filter_by(
+                        conversation_id=conversation_id, user_id=user.id
+                    ).first()
+
                     message_data = {
                         "type": "new_message",
                         "local_id": payload.get("local_id"),
@@ -458,7 +510,9 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
                                 "last_name": user.last_name,
                                 "role": user.role.value,
                                 "is_online": user.is_online,
-                                "last_seen": user.last_seen.isoformat() if user.last_seen else None
+                                "last_seen": user.last_seen.isoformat() if user.last_seen else None,
+                                "is_hub_admin": sender_participant.is_admin if sender_participant else False,
+                                "is_hub_lead": sender_participant.is_lead if sender_participant else False,
                             }
                         }
                     }
