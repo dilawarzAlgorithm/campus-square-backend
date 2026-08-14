@@ -16,11 +16,11 @@ def test_head_can_update_member_role(client, auth_headers_staff, test_verified_u
     user_id = test_verified_user.id
     response = client.patch(
         f"/api/community/members/{user_id}/role",
-        json={"role": "CAPTAIN"},
+        json={"role": "ADMIN"},
         headers=auth_headers_staff
     )
     assert response.status_code == 200
-    assert response.json()["role"] == "CAPTAIN"
+    assert response.json()["role"] == "ADMIN"
 
 def test_head_can_block_member(client, auth_headers_staff, test_other_user):
     user_id = test_other_user.id
