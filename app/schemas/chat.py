@@ -39,6 +39,8 @@ class MessageResponse(BaseModel):
 class ConversationParticipantResponse(BaseModel):
     user: ChatUser
     is_blocked: Optional[bool] = False
+    is_admin: Optional[bool] = False
+    is_approved: Optional[bool] = True
 
     class Config:
         from_attributes = True

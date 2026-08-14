@@ -163,7 +163,8 @@ async def get_my_conversations(
     db: Session = Depends(get_db)
 ):
     participants = db.query(models.ConversationParticipant).filter(
-        models.ConversationParticipant.user_id == current_user.id
+        models.ConversationParticipant.user_id == current_user.id,
+        models.ConversationParticipant.is_approved == True
     ).all()
     
     conv_ids = [p.conversation_id for p in participants]
@@ -213,9 +214,18 @@ async def get_my_conversations(
 
 @router.patch("/conversations/{conversation_id}/participants/{user_id}/block")
 async def block_participant(conversation_id: str, user_id: str, payload: dict, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
-        raise HTTPException(status_code=403, detail="Not authorized.")
+
+    is_staff = current_user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]
     
+    hub_admin = db.query(models.ConversationParticipant).filter(
+        models.ConversationParticipant.conversation_id == conversation_id,
+        models.ConversationParticipant.user_id == current_user.id,
+        models.ConversationParticipant.is_admin == True
+    ).first()
+
+    if not is_staff and not hub_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to block members in this chat.")
+        
     participant = db.query(models.ConversationParticipant).filter_by(
         conversation_id=conversation_id, user_id=user_id
     ).first()
@@ -237,7 +247,7 @@ async def block_participant(conversation_id: str, user_id: str, payload: dict, c
 @router.post("/conversations/{conversation_id}/messages")
 async def forward_message(conversation_id: str, payload: dict, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     participant = db.query(models.ConversationParticipant).filter_by(
-        conversation_id=conversation_id, user_id=current_user.id
+        conversation_id=conversation_id, user_id=current_user.id, is_approved=True
     ).first()
     
     if not participant or participant.is_blocked:
@@ -325,7 +335,8 @@ def get_messages(
 ):
     is_participant = db.query(models.ConversationParticipant).filter(
         models.ConversationParticipant.conversation_id == conversation_id,
-        models.ConversationParticipant.user_id == current_user.id
+        models.ConversationParticipant.user_id == current_user.id,
+        models.ConversationParticipant.is_approved == True
     ).first()
 
     if not is_participant:
@@ -377,7 +388,8 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
 
     is_participant = db.query(models.ConversationParticipant).filter(
         models.ConversationParticipant.conversation_id == conversation_id,
-        models.ConversationParticipant.user_id == user.id
+        models.ConversationParticipant.user_id == user.id,
+        models.ConversationParticipant.is_approved == True
     ).first()
 
     if not is_participant:

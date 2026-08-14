@@ -74,3 +74,8 @@ from app.schemas.config import (
     AppConfigResponse,
     AppConfigUpdate
 )
+
+from app.schemas.hub import (
+    HubCreate,
+    HubResponse
+)

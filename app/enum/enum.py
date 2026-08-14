@@ -2,7 +2,6 @@ from enum import Enum
 
 class UserRole(str, Enum):
     STUDENT = "STUDENT"
-    CAPTAIN = "CAPTAIN"
     COMMUNITY_HEAD = "COMMUNITY_HEAD"
     ADMIN = "ADMIN"
 
@@ -48,3 +47,8 @@ class ItemCondition(str, Enum):
     LIKE_NEW = "LIKE_NEW"
     GOOD = "GOOD"
     FAIR = "FAIR"
+
+class HubPrivacy(str, Enum):
+    PUBLIC = "PUBLIC"
+    PRIVATE = "PRIVATE"
+    INVITE_ONLY = "INVITE_ONLY"
