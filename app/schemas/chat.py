@@ -42,6 +42,7 @@ class ConversationParticipantResponse(BaseModel):
     user: ChatUser
     is_blocked: Optional[bool] = False
     is_admin: Optional[bool] = False
+    is_lead: Optional[bool] = False
     is_approved: Optional[bool] = True
 
     class Config:
@@ -55,12 +56,6 @@ class ConversationResponse(BaseModel):
     participants: List[ConversationParticipantResponse]
     last_message: Optional[MessageResponse] = None
     unread_count: int = 0
-
-    class Config:
-        from_attributes = True
-
-class ConversationParticipantResponse(BaseModel):
-    user: ChatUser
 
     class Config:
         from_attributes = True

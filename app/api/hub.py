@@ -2,6 +2,7 @@ import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
+
 from app.core.database.database import get_db
 from app.models import models
 from app.schemas import hub as hub_schemas
@@ -113,6 +114,23 @@ def create_hub(payload: hub_schemas.HubCreate, current_user: models.User = Depen
         created_at=new_hub.created_at
     )
 
+@router.delete("/{hub_id}")
+def delete_hub(hub_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    hub = db.query(models.Conversation).filter_by(id=hub_id).first()
+    if not hub: 
+        raise HTTPException(status_code=404, detail="Hub not found")
+
+    is_staff = current_user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]
+    admin_check = db.query(models.ConversationParticipant).filter_by(conversation_id=hub_id, user_id=current_user.id, is_admin=True).first()
+
+    if not is_staff and not admin_check:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this group.")
+
+    db.delete(hub)
+    db.commit()
+    return {"success": True, "message": "Group deleted successfully"}
+
+
 @router.patch("/{hub_id}/members/{user_id}/make-lead")
 def make_team_lead(hub_id: str, user_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     hub = db.query(models.Conversation).filter_by(id=hub_id).first()
@@ -137,6 +155,7 @@ def make_team_lead(hub_id: str, user_id: str, current_user: models.User = Depend
     else:
         participant.is_lead = True
         participant.is_approved = True
+
     db.commit()
     return {"success": True, "message": "User is now a Team Lead."}
 
@@ -144,13 +163,13 @@ def make_team_lead(hub_id: str, user_id: str, current_user: models.User = Depend
 def remove_team_lead(hub_id: str, user_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     hub = db.query(models.Conversation).filter_by(id=hub_id).first()
     if not hub: raise HTTPException(status_code=404, detail="Hub not found")
-    
+
     is_staff = current_user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]
     if not is_staff and hub.parent_id:
         parent_admin = db.query(models.ConversationParticipant).filter_by(conversation_id=hub.parent_id, user_id=current_user.id, is_admin=True).first()
         if not parent_admin:
             raise HTTPException(status_code=403, detail="Only parent Club Admins can remove Team Leads.")
-            
+
     participant = db.query(models.ConversationParticipant).filter_by(conversation_id=hub_id, user_id=user_id).first()
     if participant:
         participant.is_lead = False
@@ -183,6 +202,7 @@ def join_hub(hub_id: str, background_tasks: BackgroundTasks, current_user: model
             models.ConversationParticipant.conversation_id == hub.id,
             models.ConversationParticipant.is_admin == True
         ).all()
+
         for admin in admins:
             admin_user = db.query(models.User).filter(models.User.id == admin.user_id).first()
             if admin_user and admin_user.fcm_token:
@@ -217,6 +237,7 @@ def toggle_save_hub(hub_id: str, current_user: models.User = Depends(get_current
         db.commit()
         return {"is_saved": True}
 
+
 @router.patch("/{hub_id}/members/{user_id}/approve")
 def approve_member(hub_id: str, user_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     admin_check = db.query(models.ConversationParticipant).filter_by(conversation_id=hub_id, user_id=current_user.id, is_admin=True).first()
@@ -240,7 +261,7 @@ def reject_member(hub_id: str, user_id: str, current_user: models.User = Depends
     if participant:
         db.delete(participant)
         db.commit()
-    return {"success": True, "message": "Member rejected"}
+    return {"success": True, "message": "Member removed"}
 
 @router.patch("/{hub_id}/members/{user_id}/promote")
 def promote_member(hub_id: str, user_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
