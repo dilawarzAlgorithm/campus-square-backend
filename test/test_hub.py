@@ -59,8 +59,7 @@ def test_create_team_and_assign_lead(client, auth_headers_staff, auth_headers, t
     }, headers=auth_headers_staff).json()
     assert team["parent_id"] == club["id"]
 
-    client.post(f"/api/hubs/{team['id']}/join", headers=auth_headers)
-
+    # Deliberately NOT calling join here to test the auto-join logic in the make-lead endpoint
     lead_response = client.patch(
         f"/api/hubs/{team['id']}/members/{test_verified_user.id}/make-lead", 
         headers=auth_headers_staff
@@ -74,6 +73,30 @@ def test_create_team_and_assign_lead(client, auth_headers_staff, auth_headers, t
     )
     assert remove_response.status_code == 200
     assert remove_response.json()["success"] is True
+
+def test_delete_hub_by_staff(client, auth_headers_staff):
+    club = client.post("/api/hubs", json={
+        "name": "To Be Deleted Club",
+        "description": "Will delete this soon.",
+        "type": "CLUB",
+        "privacy": "PUBLIC"
+    }, headers=auth_headers_staff).json()
+    
+    del_resp = client.delete(f"/api/hubs/{club['id']}", headers=auth_headers_staff)
+    assert del_resp.status_code == 200
+    assert del_resp.json()["success"] is True
+
+def test_delete_hub_unauthorized(client, auth_headers_staff, auth_headers):
+    club = client.post("/api/hubs", json={
+        "name": "Staff Only Hub",
+        "description": "Important stuff.",
+        "type": "CLUB",
+        "privacy": "PUBLIC"
+    }, headers=auth_headers_staff).json()
+    
+    del_resp = client.delete(f"/api/hubs/{club['id']}", headers=auth_headers)
+    assert del_resp.status_code == 403
+    assert "Not authorized to delete this group" in del_resp.json()["detail"]
 
 def test_get_hubs(client, auth_headers_staff):
     response = client.get("/api/hubs", headers=auth_headers_staff)
