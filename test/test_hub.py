@@ -59,7 +59,6 @@ def test_create_team_and_assign_lead(client, auth_headers_staff, auth_headers, t
     }, headers=auth_headers_staff).json()
     assert team["parent_id"] == club["id"]
 
-    # Deliberately NOT calling join here to test the auto-join logic in the make-lead endpoint
     lead_response = client.patch(
         f"/api/hubs/{team['id']}/members/{test_verified_user.id}/make-lead", 
         headers=auth_headers_staff

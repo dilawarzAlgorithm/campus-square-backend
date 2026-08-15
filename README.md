@@ -2,7 +2,7 @@
 
 The official backend infrastructure for Campus Square, a unified, exclusive ecosystem designed to replace fragmented college communication tools like WhatsApp and Telegram.
 
-Built with performance, scalability, and strict access control in mind, this RESTful API powers the mobile frontend across four primary modules: The Square, The Bazaar, The Vault, and The Profile.
+Built with performance, scalability, and strict access control in mind, this RESTful API powers the mobile frontend across five primary modules: The Square, The Bazaar, Campus Hubs, The Vault, and The Profile.
 
 ## 🚀 Tech Stack
 
@@ -25,6 +25,7 @@ Built with performance, scalability, and strict access control in mind, this RES
 
 - **The Square API**: Endpoints for global broadcasting, real-time notice propagation, roommate preference matching, and location-tagged Lost & Found logging. Includes dynamic sorting by 'Most Voted' or 'Recent' and a dedicated 'Discussions' tab for peer interaction.
 - **The Bazaar API**: Handles peer-to-peer marketplace logic including saving/bookmarking items, and secure routing to the DM hub.
+- **Campus Hubs API**: A hierarchical community system supporting official `CLUBS`, peer-created `STUDY_GROUPS`, and nested `TEAMS`. Features granular access control with `Hub Admins` and `Team Leads`.
 - **The Vault API**: Structured data endpoints for department-wise academic resources (PYQs, Notes, Syllabus) paired with a robust upvote/downvote ranking algorithm and deduplication logic via SHA256 hashing.
 - **The Profile API**: Gamified Karma calculation engine that tracks user trust metrics, platform contributions, and configurable storage quotas.
 
@@ -95,6 +96,24 @@ The Flutter app communicates with the FastAPI server via JWT-authenticated REST 
 | `/api/bazaar/my-products`                | `GET`              | Retrieve all items listed by the authenticated user.  | Authenticated |
 | `/api/bazaar/products/{product_id}`      | `PATCH` / `DELETE` | Mark item as `SOLD` or remove listing.                | Owner / Staff |
 | `/api/bazaar/products/{product_id}/save` | `POST`             | Toggle bookmark status for a marketplace item.        | Authenticated |
+
+---
+
+### 🏛️ Campus Hubs (`/api/hubs`)
+
+| Endpoint                                    | Method         | Description                                                | Access Level          |
+| :------------------------------------------ | :------------- | :--------------------------------------------------------- | :-------------------- |
+| `/api/hubs`                                 | `GET` / `POST` | List active Hubs/Teams or create a new community Hub.      | Authenticated / Staff |
+| `/api/hubs/{hub_id}`                        | `DELETE`       | Permanently delete a Hub and all associated data.          | Hub Admin / Staff     |
+| `/api/hubs/{hub_id}/join`                   | `POST`         | Request to join or instantly join a public Hub.            | Authenticated         |
+| `/api/hubs/{hub_id}/leave`                  | `POST`         | Leave a Hub or Team.                                       | Member                |
+| `/api/hubs/{hub_id}/save`                   | `POST`         | Toggle bookmark/favorite status for a Hub.                 | Authenticated         |
+| `/api/hubs/{hub_id}/members/{id}/approve`   | `PATCH`        | Approve a pending join request for a private Hub.          | Hub Admin / Staff     |
+| `/api/hubs/{hub_id}/members/{id}/reject`    | `DELETE`       | Reject a join request or kick an existing member.          | Hub Admin / Staff     |
+| `/api/hubs/{hub_id}/members/{id}/promote`   | `PATCH`        | Promote a standard member to a Hub Admin.                  | Hub Admin / Staff     |
+| `/api/hubs/{hub_id}/members/{id}/demote`    | `PATCH`        | Demote a Hub Admin back to a standard member.              | Hub Admin / Staff     |
+| `/api/hubs/{hub_id}/members/{id}/make-lead` | `PATCH`        | Assign a member as a Team Lead for a specific nested team. | Parent Admin / Staff  |
+| `/api/hubs/{hub_id}/members/{id}/rm-lead`   | `PATCH`        | Remove Team Lead privileges.                               | Parent Admin / Staff  |
 
 ---
 
