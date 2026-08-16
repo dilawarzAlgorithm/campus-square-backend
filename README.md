@@ -187,7 +187,7 @@ The Flutter app communicates with the FastAPI server via JWT-authenticated REST 
 
    ```bash
    python -m venv venv
-   source venv/bin/activate  # Windows: venv\Scripts\activate
+   source venv/bin/activate  #Windows: venv\Scripts\activate
    ```
 
 3. Install dependencies
