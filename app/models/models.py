@@ -6,3 +6,4 @@ from app.models.square import Notice, NoticeComment, NoticeVote
 from app.models.chat import Conversation, ConversationParticipant, Message, SavedHub
 from app.models.storage import FileAsset
 from app.models.bazaar import BazaarProduct, SavedProduct
+from app.models.timetable import Subject, TimetableEvent, AttendanceRecord

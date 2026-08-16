@@ -52,3 +52,8 @@ class HubPrivacy(str, Enum):
     PUBLIC = "PUBLIC"
     PRIVATE = "PRIVATE"
     INVITE_ONLY = "INVITE_ONLY"
+
+class AttendanceStatus(str, Enum):
+    ATTENDED = "ATTENDED"
+    MISSED = "MISSED"
+    CANCELLED = "CANCELLED"

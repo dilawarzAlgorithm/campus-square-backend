@@ -79,3 +79,13 @@ from app.schemas.hub import (
     HubCreate,
     HubResponse
 )
+
+from app.schemas.timetable import (
+    SubjectCreate,
+    SubjectUpdate,
+    SubjectDashboardResponse,
+    TimetableEventCreate,
+    TimetableEventResponse,
+    AttendanceMark,
+    AttendanceRecordResponse
+)
