@@ -59,3 +59,22 @@ def test_block_user_by_admin(client, auth_headers_admin, test_verified_user):
     )
     assert response.status_code == 200
     assert response.json()["is_blocked"] is True
+
+def test_toggle_institution_block(client, auth_headers_admin, test_institution):
+    inst_id = test_institution.id
+    response = client.patch(
+        f"/api/admin/institutions/{inst_id}/block",
+        json={"is_blocked": True},
+        headers=auth_headers_admin
+    )
+    assert response.status_code == 200
+    assert response.json()["is_blocked"] is True
+
+def test_delete_institution(client, auth_headers_admin, test_institution):
+    inst_id = test_institution.id
+    response = client.delete(
+        f"/api/admin/institutions/{inst_id}",
+        headers=auth_headers_admin
+    )
+    assert response.status_code == 200
+    assert response.json()["success"] is True
