@@ -458,7 +458,12 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str, token: str,
                     participant = db.query(models.ConversationParticipant).filter_by(
                         conversation_id=conversation_id, user_id=user.id
                     ).first()
-                    if participant and participant.is_blocked:
+                    if not participant:
+                        await websocket.send_json({"type": "participant_removed", "user_id": user.id})
+                        continue
+                        
+                    if participant.is_blocked:
+                        await websocket.send_json({"type": "participant_blocked", "user_id": user.id, "is_blocked": True})
                         continue
                 
                 if action == "message":

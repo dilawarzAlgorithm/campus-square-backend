@@ -49,5 +49,12 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             detail="Your account has been suspended.",
             headers={"WWW-Authenticate": "Bearer"}
         )
+    
+    if user.institution and user.institution.is_blocked and user.role != models.UserRole.ADMIN:
+        raise HTTPException(
+            status_code=403, 
+            detail="Your institution has been suspended by the platform administrators.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
 
     return user

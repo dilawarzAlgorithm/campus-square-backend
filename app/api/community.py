@@ -99,7 +99,7 @@ def update_member_role(
     return target_user
 
 @router.patch("/members/{user_id}/block", response_model=schemas.UserResponse)
-def block_member(
+async def block_member(
     user_id: str,
     payload: schemas.MemberBlockRequest,
     current_user: models.User = Depends(require_community_head),
@@ -119,6 +119,11 @@ def block_member(
     target_user.is_blocked = payload.is_blocked
     db.commit()
     db.refresh(target_user)
+
+    from app.api.chat import manager
+    if payload.is_blocked:
+        await manager.broadcast_to_user_hub(target_user.id, {"type": "account_blocked", "user_id": target_user.id})
+
     return target_user
 
 @router.patch("/members/{user_id}/roll-number", response_model=schemas.UserResponse)

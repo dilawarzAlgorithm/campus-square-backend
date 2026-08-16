@@ -17,6 +17,8 @@ class Institution(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+    is_blocked = Column(Boolean, default=False)
+    
     campaign_version_id = Column(String, default="v1")
     show_popup = Column(Boolean, default=False)
     popup_title = Column(String, nullable=True)

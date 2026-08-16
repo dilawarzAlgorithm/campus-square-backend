@@ -30,7 +30,7 @@ Built with performance, scalability, and strict access control in mind, this RES
 - **The Profile API**: Gamified Karma calculation engine that tracks user trust metrics, platform contributions, and configurable storage quotas.
 
 3. **Real-Time Communication (WebSocket Hub)**
-   A scalable multi-connection WebSocket architecture supporting real-time Direct Messages (DMs) and Group/Departmental chats. Includes typing indicators, delivered/read receipts, active presence tracking (online/last seen), and live editing/deleting.
+   A scalable multi-connection WebSocket architecture supporting real-time Direct Messages (DMs) and Group/Departmental chats. Includes typing indicators, delivered/read receipts, active presence tracking (online/last seen), and live editing/deleting. It acts as an active enforcer of moderation actions, actively disconnecting and blocking socket events the moment a user is removed or suspended from a chat.
 
 4. **Global Campaign & Theme Engine**
    Dynamic configuration endpoints allowing Global Administrators and Community Heads to instantly push UI updates (Lottie animations, persistent banners) and completely reskin the app (hex color overrides) without requiring App Store/Play Store updates.
@@ -148,15 +148,17 @@ The Flutter app communicates with the FastAPI server via JWT-authenticated REST 
 
 ### 🌍 Global Administration (`/api/admin`)
 
-| Endpoint                                     | Method          | Description                                                    | Access Level |
-| :------------------------------------------- | :-------------- | :------------------------------------------------------------- | :----------- |
-| `/api/admin/metrics`                         | `GET`           | Retrieve platform-wide metrics (Total users, campuses, files). | Global Admin |
-| `/api/admin/institutions`                    | `GET` / `POST`  | List all registered campuses or provision a new institution.   | Global Admin |
-| `/api/admin/institutions/{id}/storage-limit` | `PATCH`         | Update default student storage quota for an entire campus.     | Global Admin |
-| `/api/admin/institutions/{id}/campaign`      | `GET` / `PATCH` | Fetch or override campaign settings for a specific campus.     | Global Admin |
-| `/api/admin/campaign/global`                 | `PATCH`         | Force an application theme or campaign across ALL campuses.    | Global Admin |
-| `/api/admin/users`                           | `GET`           | Global user directory search.                                  | Global Admin |
-| `/api/admin/users/{user_id}/block`           | `PATCH`         | Suspend or reactivate user accounts platform-wide.             | Global Admin |
+| Endpoint                                     | Method          | Description                                                     | Access Level |
+| :------------------------------------------- | :-------------- | :-------------------------------------------------------------- | :----------- |
+| `/api/admin/metrics`                         | `GET`           | Retrieve platform-wide metrics (Total users, campuses, files).  | Global Admin |
+| `/api/admin/institutions`                    | `GET` / `POST`  | List all registered campuses or provision a new institution.    | Global Admin |
+| `/api/admin/institutions/{id}`               | `DELETE`        | Permanently purge an institution and all associated campus data | Global Admin |
+| `/api/admin/institutions/{id}/storage-limit` | `PATCH`         | Update default student storage quota for an entire campus.      | Global Admin |
+| `/api/admin/institutions/{id}/block`         | `PATCH`         | Suspend an entire campus instance from platform access.         | Global Admin |
+| `/api/admin/institutions/{id}/campaign`      | `GET` / `PATCH` | Fetch or override campaign settings for a specific campus.      | Global Admin |
+| `/api/admin/campaign/global`                 | `PATCH`         | Force an application theme or campaign across ALL campuses.     | Global Admin |
+| `/api/admin/users`                           | `GET`           | Global user directory search.                                   | Global Admin |
+| `/api/admin/users/{user_id}/block`           | `PATCH`         | Suspend or reactivate user accounts platform-wide.              | Global Admin |
 
 ---
 

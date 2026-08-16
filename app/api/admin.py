@@ -187,12 +187,42 @@ def update_inst_storage_limit(
     db.refresh(inst)
     return inst
 
+@router.patch("/institutions/{institution_id}/block", response_model=schemas.InstitutionResponse)
+def toggle_institution_block(
+    institution_id: str,
+    payload: schemas.MemberBlockRequest,
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    inst = db.query(models.Institution).filter(models.Institution.id == institution_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Institution not found.")
+    inst.is_blocked = payload.is_blocked
+    db.commit()
+    db.refresh(inst)
+    return inst
+
+@router.delete("/institutions/{institution_id}", status_code=status.HTTP_200_OK)
+def delete_institution(
+    institution_id: str,
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    inst = db.query(models.Institution).filter(models.Institution.id == institution_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Institution not found.")
+    
+    # Cascade delete handles relations usually, but ensure db matches
+    db.delete(inst)
+    db.commit()
+    return {"success": True, "message": "Institution deleted successfully"}
+
 @router.get("/users", response_model=List[schemas.UserResponse])
 def get_all_users(current_user: models.User = Depends(require_admin), db: Session = Depends(get_db)):
     return db.query(models.User).order_by(models.User.created_at.desc()).all()
 
 @router.patch("/users/{user_id}/block", response_model=schemas.UserResponse)
-def toggle_user_block(
+async def toggle_user_block(
     user_id: str, 
     payload: schemas.MemberBlockRequest,
     current_user: models.User = Depends(require_admin), 
@@ -208,5 +238,9 @@ def toggle_user_block(
     user.is_blocked = payload.is_blocked
     db.commit()
     db.refresh(user)
+
+    from app.api.chat import manager
+    if payload.is_blocked:
+        await manager.broadcast_to_user_hub(user.id, {"type": "account_blocked", "user_id": user.id})
 
     return user

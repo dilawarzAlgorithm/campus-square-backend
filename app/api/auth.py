@@ -293,6 +293,9 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     if user.is_blocked:
         raise HTTPException(status_code=403, detail="Your account has been blocked by the community head.")
         
+    if user.institution and user.institution.is_blocked:
+        raise HTTPException(status_code=403, detail="Your institution has been suspended by the platform administrators.")
+
     if user.role in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -377,7 +380,13 @@ def login_staff(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 
     if not user or not verify(payload.password, user.password_hash): 
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
-         
+
+    if user.is_blocked:
+        raise HTTPException(status_code=403, detail="Your account has been blocked by the administration.")
+        
+    if user.institution and user.institution.is_blocked and user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Your institution has been suspended by the platform administrators.")
+
     if user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied. Not a staff member.")
 

@@ -252,7 +252,7 @@ def approve_member(hub_id: str, user_id: str, current_user: models.User = Depend
     return {"success": True, "message": "Member approved"}
 
 @router.delete("/{hub_id}/members/{user_id}/reject")
-def reject_member(hub_id: str, user_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def reject_member(hub_id: str, user_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     admin_check = db.query(models.ConversationParticipant).filter_by(conversation_id=hub_id, user_id=current_user.id, is_admin=True).first()
     if not admin_check and current_user.role not in [UserRole.ADMIN, UserRole.COMMUNITY_HEAD]:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -261,6 +261,13 @@ def reject_member(hub_id: str, user_id: str, current_user: models.User = Depends
     if participant:
         db.delete(participant)
         db.commit()
+
+        from app.api.chat import manager
+        await manager.broadcast_to_conversation(hub_id, {
+            "type": "participant_removed",
+            "user_id": user_id
+        })
+
     return {"success": True, "message": "Member removed"}
 
 @router.patch("/{hub_id}/members/{user_id}/promote")
