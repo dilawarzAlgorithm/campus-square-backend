@@ -52,7 +52,7 @@ def create_anonymous_alert(
     db: Session = Depends(get_db)
 ):
     
-    if not current_user.can_send_alerts:
+    if current_user.can_send_alerts is False:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Your access to the emergency alert system has been suspended by the administration."

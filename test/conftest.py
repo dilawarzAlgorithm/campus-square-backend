@@ -118,7 +118,8 @@ def test_verified_user(db, test_institution, test_department):
         institution_id=test_institution.id,
         department_id=test_department.id,
         is_verified=True,
-        role=UserRole.STUDENT
+        role=UserRole.STUDENT,
+        can_send_alerts=True
     )
     db.add(verified_user)
     db.flush()
@@ -139,7 +140,8 @@ def test_staff_user(db, test_institution, test_department):
         institution_id=test_institution.id,
         department_id=test_department.id,
         is_verified=True,
-        role=UserRole.COMMUNITY_HEAD
+        role=UserRole.COMMUNITY_HEAD,
+        can_send_alerts=True
     )
     db.add(staff)
     db.flush()
@@ -159,7 +161,8 @@ def test_admin_user(db, test_institution):
         last_name="Admin",
         institution_id=test_institution.id,
         is_verified=True,
-        role=UserRole.ADMIN
+        role=UserRole.ADMIN,
+        can_send_alerts=True
     )
     db.add(admin)
     db.flush()
@@ -180,7 +183,8 @@ def test_other_user(db, test_institution, test_department):
         institution_id=test_institution.id,
         department_id=test_department.id,
         is_verified=True,
-        role=UserRole.STUDENT
+        role=UserRole.STUDENT,
+        can_send_alerts=True
     )
     db.add(other_user)
     db.commit()
