@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, ForeignKey, Enum as SQLEnum, TIMESTAMP, text as sa_text, Integer
+from sqlalchemy import Column, String, ForeignKey, Enum as SQLEnum, TIMESTAMP, text as sa_text, Integer, Boolean
 from sqlalchemy.orm import relationship, backref
 
 from app.core.database.database import Base
@@ -56,5 +56,33 @@ class NoticeComment(Base):
 
     notice = relationship("Notice", back_populates="comments")
     author = relationship("User")
-
     replies = relationship("NoticeComment", backref=backref('parent', remote_side=[id]), cascade="all, delete-orphan")
+
+class UsefulLink(Base):
+    __tablename__ = "useful_links"
+
+    id = Column(String, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    url = Column(String, nullable=False)
+    icon_name = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    
+    institution_id = Column(String, ForeignKey("institutions.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=sa_text('now()'), nullable=False)
+
+    institution = relationship("Institution")
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(String, primary_key=True, index=True)
+    message = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    
+    sender_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    institution_id = Column(String, ForeignKey("institutions.id", ondelete="CASCADE"), nullable=False)
+    
+    created_at = Column(TIMESTAMP(timezone=True), server_default=sa_text('now()'), nullable=False)
+
+    sender = relationship("User")
+    institution = relationship("Institution")

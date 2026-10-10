@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Enum as SQLEnum, TIMESTAMP, text
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import expression
 
 from app.core.database.database import Base
 from app.enum.enum import UserRole
@@ -54,6 +55,8 @@ class User(Base):
     is_online = Column(Boolean, default=False)
     last_seen = Column(TIMESTAMP(timezone=True), nullable=True)
     fcm_token = Column(String, nullable=True)
+
+    can_send_alerts = Column(Boolean, server_default=expression.true(), default=False)
     
     verification_otp = Column(String, nullable=True)
     otp_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)

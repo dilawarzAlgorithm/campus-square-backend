@@ -60,3 +60,32 @@ class NoticeResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class UsefulLinkCreate(BaseModel):
+    title: str = Field(..., min_length=2)
+    url: str = Field(..., min_length=5)
+    icon_name: Optional[str] = None
+    is_active: bool = True
+
+class UsefulLinkResponse(BaseModel):
+    id: str
+    title: str
+    url: str
+    icon_name: Optional[str]
+    is_active: bool
+    institution_id: str
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class AlertCreate(BaseModel):
+    message: str = Field(..., min_length=5, max_length=300)
+
+class AlertResponse(BaseModel):
+    id: str
+    message: str
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
